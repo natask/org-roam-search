@@ -25,16 +25,16 @@
 (defvar org-roam-search-predicates
   '((or  :name or  :transform
          ((`(or . ,clauses) `(or ,@(mapcar #' rec clauses))))
-    :stringify
-    ((`(or . ,clauses) (cl-reduce (lambda (acc elem)
-                                     (let ((res (rec elem)))
-                                       ;; HACK: works because plist-get grabs the first it can find.
-                                       ;; Here it grabs the most recently computed value.
-                                       ;; This means need to reverse
-                                       ;; while presevering order of subsequent Even and Odd
-                                       ;; index elements
-                                       (-concat res acc)))
-                                   clauses :initial-value accum))))
+         :stringify
+         ((`(or . ,clauses) (cl-reduce (lambda (acc elem)
+                                         (let ((res (rec elem)))
+                                           ;; HACK: works because plist-get grabs the first it can find.
+                                           ;; Here it grabs the most recently computed value.
+                                           ;; This means need to reverse
+                                           ;; while presevering order of subsequent Even and Odd
+                                           ;; index elements
+                                           (-concat res acc)))
+                                       clauses :initial-value accum))))
     (not :name not :transform
          ((`(not . ,clauses) `(not ,@(mapcar #' rec clauses)))))
     (and :name and
@@ -43,10 +43,10 @@
          :stringify
          ((`(and . ,clauses) (cl-reduce (lambda (acc elem)
                                           (let ((res (rec elem)))
-                                        (list :title (-concat (plist-get acc :title)
-                                                      (plist-get res :title))
-                                              :tags (-concat (plist-get acc :tags)
-                                                             (plist-get res :tags)))))
+                                            (list :title (-concat (plist-get acc :title)
+                                                                  (plist-get res :title))
+                                                  :tags (-concat (plist-get acc :tags)
+                                                                 (plist-get res :tags)))))
                                         clauses :initial-value accum))))
     (titles :name titles :aliases '(title)
             :transform
@@ -82,50 +82,56 @@
            :stringify
            (((pred stringp) element)))))
 
-  (defvar org-roam-search-default-predicate-boolean 'and)
-  (defvar org-roam-search-default-predicate 'both)
+(defvar org-roam-search-default-predicate-boolean 'and)
+(defvar org-roam-search-default-predicate 'both)
 
 ;;; Code:
 (declare-function org-roam-search--query-string-to-sexp "ext:org-roam-search" (query) t)
 (declare-function org-roam-search--transform-query "ext:org-roam-search" (query) t)
 (declare-function org-roam-search--stringify-query "ext:org-roam-search" (query) t)
-  (fset 'org-roam-search--query-string-to-sexp
-        (sexp-string--define-query-string-to-sexp-fn  "org-roam-search"))
-  (fset 'org-roam-search--transform-query (sexp-string--define-transform-query-fn "org-roam-search" :transform))
+(fset 'org-roam-search--query-string-to-sexp
+      (sexp-string--define-query-string-to-sexp-fn  "org-roam-search"))
+(fset 'org-roam-search--transform-query (sexp-string--define-transform-query-fn "org-roam-search" :transform))
 (fset 'org-roam-search--stringify-query (sexp-string--define-transform-query-fn "org-roam-search" :stringify))
 
-  (defun org-roam-search--get-title-path-completions (conditions)
-    "Return an alist for completion.
+(defun org-roam-search--get-title-path-completions (conditions)
+  "Return an alist for completion.
 The car is the displayed title for completion, and the cdr is a
 plist containing the path and title for the file."
-    (let* ((rows (org-roam-db-query `[:select [files:file titles:title tags:tags files:meta] :from titles
-                                      :left :join tags
-                                      :on (= titles:file tags:file)
-                                      :left :join files
-                                      :on (= titles:file files:file)
-                                      :where ,conditions]))
-           completions)
-      (setq rows (seq-sort-by (lambda (x)
-                                (plist-get (nth 3 x) :mtime))
-                              #'time-less-p
-                              rows))
-      (dolist (row rows completions)
-        (pcase-let ((`(,file-path ,title ,tags) row))
-          (let ((k (org-roam--add-tag-string title tags))
-                (v (list :path file-path :title title)))
-            (push (cons k v) completions))))))
+  (let* ((rows (org-roam-db-query `[:select [files:file titles:title tags:tags files:meta] :from titles
+                                    :left :join tags
+                                    :on (= titles:file tags:file)
+                                    :left :join files
+                                    :on (= titles:file files:file)
+                                    :where ,conditions]))
+         completions)
+    (setq rows (seq-sort-by (lambda (x)
+                              (plist-get (nth 3 x) :mtime))
+                            #'time-less-p
+                            rows))
+    (dolist (row rows completions)
+      (pcase-let ((`(,file-path ,title ,tags) row))
+        (let ((k (org-roam--add-tag-string title tags))
+              (v (list :path file-path :title title)))
+          (push (cons k v) completions))))))
 
-  (defun org-roam-search-completion--helm-candidate-transformer (candidates _source)
-    "Transforms CANDIDATES for Helm-based completing read.
+(defun org-roam-search-completion--helm-candidate-transformer (candidates _source)
+  "Transforms CANDIDATES for Helm-based completing read.
 SOURCE is not used."
-    (let ((prefix (propertize "[?] "
-                              'face 'helm-ff-prefix)))
-      (cons (propertize helm-pattern
-                        'display (concat prefix (org-roam-search-transform-string helm-pattern)))
-            candidates)))
+  (let ((prefix (propertize "[?] "
+                            'face 'helm-ff-prefix)))
+    (cons (propertize helm-pattern
+                      'display (concat prefix (--> helm-pattern
+                                                   (org-roam-search--query-string-to-sexp it)
+                                                   (org-roam-search--stringify-query it)
+                                                   (org-roam--add-tag-string
+                                                    (combine-and-quote-strings
+                                                     (plist-get it :title))
+                                                    (plist-get it :tags))))
+    candidates)))
 
-  (defun org-roam-search-find-file (&optional initial-prompt completions filter-fn no-confirm)
-    "Find and open an Org-roam file.
+(defun org-roam-search-find-file (&optional initial-prompt completions filter-fn no-confirm)
+  "Find and open an Org-roam file.
 INITIAL-PROMPT is the initial title prompt.
 COMPLETIONS is a list of completions to be used instead of
 `org-roam--get-title-path-completions`.
@@ -133,24 +139,24 @@ FILTER-FN is the name of a function to apply on the candidates
 which takes as its argument an alist of path-completions.  See
 `org-roam--get-title-path-completions' for details.
 If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
-    (interactive)
-    (unless org-roam-mode (org-roam-mode))
-    (let* ((completions (funcall (or filter-fn #'identity)
-                                 (or completions (org-roam-search--get-title-path-completions ))))
-           (title-with-tags (if no-confirm
-                                initial-prompt
-                              (org-roam-completion--completing-read "File: " completions
-                                                                    :initial-input initial-prompt)))
+  (interactive)
+  (unless org-roam-mode (org-roam-mode))
+  (let* ((completions (funcall (or filter-fn #'identity)
+                               (or completions (org-roam-search--get-title-path-completions ))))
+         (title-with-tags (if no-confirm
+                              initial-prompt
+                            (org-roam-completion--completing-read "File: " completions
+                                                                  :initial-input initial-prompt)))
 
-           (res (cdr (assoc title-with-tags completions)))
-           (file-path (plist-get res :path)))
-      (if file-path
-          (org-roam--find-file file-path)
-        (let ((org-roam-capture--info `((title . ,title-with-tags)
-                                        (slug  . ,(funcall org-roam-title-to-slug-function title-with-tags))))
-              (org-roam-capture--context 'title))
-          (setq org-roam-capture-additional-template-props (list :finalize 'find-file))
-          (org-roam-capture--capture)))))
+         (res (cdr (assoc title-with-tags completions)))
+         (file-path (plist-get res :path)))
+    (if file-path
+        (org-roam--find-file file-path)
+      (let ((org-roam-capture--info `((title . ,title-with-tags)
+                                      (slug  . ,(funcall org-roam-title-to-slug-function title-with-tags))))
+            (org-roam-capture--context 'title))
+        (setq org-roam-capture-additional-template-props (list :finalize 'find-file))
+        (org-roam-capture--capture)))))
 
-  (provide 'org-roam-search)
+(provide 'org-roam-search)
 ;;; org-roam-search.el ends here
