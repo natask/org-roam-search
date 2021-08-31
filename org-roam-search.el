@@ -76,7 +76,7 @@
             (rec `(titles ,@rest) accum))))
     (query :name query
            :transform
-           (((pred stringp) (intern (concat "%%" element "%%"))))
+           (((pred stringp) `',(concat "%%" element "%%")))
            :search
            (((pred stringp) element))
            :stringify
@@ -185,17 +185,16 @@ If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
                               initial-prompt
                             (org-roam-search-completion--completing-read "File: " completions
                                                                          :initial-input initial-prompt)))
-
-         (file-path (plist-get res :path)))
+         (file-path (or
+                     (plist-get res :path)
+                     (plist-get (cdr (assoc res completions)) :path))))
     (if file-path
         (org-roam--find-file file-path)
       (when-let* ((title-tags-plist (-some->> res
                                       (org-roam-search--query-string-to-sexp)
                                       (org-roam-search--stringify-query)))
                   (title (combine-and-quote-strings (plist-get title-tags-plist :title)))
-                  (tags (let ((tags (plist-get title-tags-plist :tags)))
-                          (if (null tags) ""
-                            (format ":%s:" (mapconcat #'identity tags ":")))))
+                  (tags (combine-and-quote-strings (plist-get title-tags-plist :tags)))
                   (org-roam-capture--info `((title . ,title)
                                             (slug  . ,(funcall org-roam-title-to-slug-function title))))
                   (org-roam-capture--context 'title)
@@ -207,7 +206,7 @@ If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
                                                  :file-name "%:description"
                                                  :head "#+title: %:description
 #+roam_alias:
-#+filetags: %:tags
+#+roam_tags: %:tags
 #+roam_keys: %:link
 #+created: %U
 #+last_modified: %U \n"
