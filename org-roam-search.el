@@ -113,6 +113,9 @@ plist containing the path and title for the file."
               (v (list :path file-path :title title)))
           (push (cons k v) completions))))))
 
+(defun org-roam-search--join-titles (titles)
+  (-reduce (lambda (acc x) (concat acc " " x)) titles))
+
 (defun org-roam-search-completion--helm-candidate-transformer (candidates _source)
   "Transforms CANDIDATES for Helm-based completing read.
 SOURCE is not used."
@@ -123,7 +126,7 @@ SOURCE is not used."
                                                                        (org-roam-search--query-string-to-sexp it)
                                                                        (org-roam-search--stringify-query it)
                                                                        (org-roam--add-tag-string
-                                                                        (combine-and-quote-strings
+                                                                        (org-roam-search--join-titles
                                                                          (plist-get it :title))
                                                                         (plist-get it :tags)))
                                                 (error ""))))
@@ -168,7 +171,7 @@ Return user choice."
         (funcall action res)
       res)))
 
-(defun org-roam-search-find-file (&optional initial-prompt completions filter-fn no-confirm)
+(cl-defun org-roam-search-find-file (&key initial-prompt completions filter-fn no-confirm template)
   "Find and open an Org-roam file.
 INITIAL-PROMPT is the initial title prompt.
 COMPLETIONS is a list of completions to be used instead of
@@ -193,7 +196,7 @@ If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
       (when-let* ((title-tags-plist (-some->> res
                                       (org-roam-search--query-string-to-sexp)
                                       (org-roam-search--stringify-query)))
-                  (title (combine-and-quote-strings (plist-get title-tags-plist :title)))
+                  (title (org-roam-search--join-titles (plist-get title-tags-plist :title)))
                   (tags (combine-and-quote-strings (plist-get title-tags-plist :tags)))
                   (org-roam-capture--info `((title . ,title)
                                             (slug  . ,(funcall org-roam-title-to-slug-function title))))
@@ -201,17 +204,18 @@ If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
                   (org-capture-link-is-already-stored 't)
                   (org-store-link-plist (list :description title :tags tags))
                   (org-roam-capture-additional-template-props (list :finalize 'find-file))
-                  (org-roam-capture-templates '(("l" "from link" plain (function org-roam--capture-get-point)
+                  (org-roam-capture-templates (or template '(("l" "from link" plain (function org-roam--capture-get-point)
                                                  "%?"
-                                                 :file-name "%:description"
+                                                 :file-name "${slug}"
                                                  :head "#+title: %:description
 #+roam_alias:
 #+roam_tags: %:tags
 #+roam_keys: %:link
 #+created: %U
 #+last_modified: %U \n"
-                                                 :unnarrowed t))))
-        (org-roam-capture--capture 'nil "l")))))
+                                                 :immediate-finish t
+                                                 :unnarrowed t)))))
+        (org-roam-capture--capture 'nil)))))
 
 (provide 'org-roam-search)
 ;;; org-roam-search.el ends here
