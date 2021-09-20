@@ -19,6 +19,7 @@
 ;;
 ;;; Requirements:
 (require 'org-roam)
+(require 'cl-lib)
 (require 'sexp-string)
 
 ;;; Vars:
@@ -114,7 +115,8 @@ plist containing the path and title for the file."
           (push (cons k v) completions))))))
 
 (defun org-roam-search--join-titles (titles)
-  (-reduce (lambda (acc x) (concat acc " " x)) titles))
+  (if titles
+  (reduce (lambda (acc x) (concat acc " " x)) titles)))
 
 (defun org-roam-search-completion--helm-candidate-transformer (candidates _source)
   "Transforms CANDIDATES for Helm-based completing read.
