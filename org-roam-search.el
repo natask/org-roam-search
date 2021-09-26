@@ -100,9 +100,9 @@
 The car is the displayed title for completion, and the cdr is a
 plist containing the path and title for the file."
   (let* ((rows (org-roam-db-query `[:select [files:file titles:title tags:tags files:meta] :from titles
-                                      :left :join files :using [[ file ]]
-                                      :left :join tags :using  [[ file ]]
-                                      :where ,conditions]))
+                                    :left :join files :using [[ file ]]
+                                    :left :join tags :using  [[ file ]]
+                                    :where ,conditions]))
          completions)
     (setq rows (seq-sort-by (lambda (x)
                               (plist-get (nth 3 x) :mtime))
@@ -116,7 +116,7 @@ plist containing the path and title for the file."
 
 (defun org-roam-search--join-titles (titles)
   (if titles
-  (reduce (lambda (acc x) (concat acc " " x)) titles)))
+      (reduce (lambda (acc x) (concat acc " " x)) titles)))
 
 (defun org-roam-search-completion--helm-candidate-transformer (candidates _source)
   "Transforms CANDIDATES for Helm-based completing read.
@@ -187,9 +187,9 @@ If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
   (let* ((completions (funcall (or filter-fn #'identity)
                                (or completions (org-roam--get-title-path-completions))))
          (res (if no-confirm
-                              initial-prompt
-                            (org-roam-search-completion--completing-read "File: " completions
-                                                                         :initial-input initial-prompt)))
+                  initial-prompt
+                (org-roam-search-completion--completing-read "File: " completions
+                                                             :initial-input initial-prompt)))
          (file-path (or
                      (plist-get res :path)
                      (plist-get (cdr (assoc res completions)) :path))))
@@ -207,17 +207,97 @@ If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
                   (org-store-link-plist (list :description title :tags tags))
                   (org-roam-capture-additional-template-props (list :finalize 'find-file))
                   (org-roam-capture-templates (or template '(("l" "from link" plain (function org-roam--capture-get-point)
-                                                 "%?"
-                                                 :file-name "${slug}"
-                                                 :head "#+title: %:description
+                                                              "%?"
+                                                              :file-name "${slug}"
+                                                              :head "#+title: %:description
 #+roam_alias:
-#+roam_tags: %:tags
+#+roam_tags: slug %:tags
 #+roam_keys: %:link
 #+created: %U
 #+last_modified: %U \n"
-                                                 :immediate-finish t
-                                                 :unnarrowed t)))))
+                                                              :immediate-finish t
+                                                              :unnarrowed t)))))
         (org-roam-capture--capture 'nil)))))
+
+;;;###autoload
+(cl-defun org-roam-search-insert (&optional arg &key lowercase completions filter-fn description link-type template)
+  "Find an Org-roam file, and insert a relative org link to it at point.
+Return selected file if it exists.
+If LOWERCASE is non-nil, downcase the link description.
+LINK-TYPE is the type of link to be created. It defaults to \"file\".
+COMPLETIONS is a list of completions to be used instead of
+`org-roam--get-title-path-completions`.
+FILTER-FN is the name of a function to apply on the candidates
+which takes as its argument an alist of path-completions.
+If DESCRIPTION is provided, use this as the link label.  See
+`org-roam--get-title-path-completions' for details."
+  (interactive "P")
+  (unless org-roam-mode (org-roam-mode))
+  ;; Deactivate the mark on quit since `atomic-change-group' prevents it
+  (unwind-protect
+      ;; Group functions together to avoid inconsistent state on quit
+      (atomic-change-group
+        (let* (region-text
+               beg end
+               (_ (when (region-active-p)
+                    (setq beg (set-marker (make-marker) (region-beginning)))
+                    (setq end (set-marker (make-marker) (region-end)))
+                    (setq region-text (org-link-display-format (buffer-substring-no-properties beg end)))))
+               (completions (--> (or completions
+                                     (org-roam--get-title-path-completions))
+                                 (if filter-fn
+                                     (funcall filter-fn it)
+                                   it)))
+               (title-with-tags (org-roam-search-completion--completing-read "File: " completions
+                                                                             :initial-input region-text))
+               (target-file-path (or
+                                  (plist-get title-with-tags :path)
+                                  (plist-get (cdr (assoc title-with-tags completions)) :path)))
+               (title (or
+                       (plist-get title-with-tags :title)
+                       (plist-get (cdr (assoc title-with-tags completions)) :title)))
+               (description (or description region-text title))
+               (description (if lowercase
+                                (downcase description)
+                              description)))
+          (cond ((and target-file-path
+                      (file-exists-p target-file-path))
+                 (when region-text
+                   (delete-region beg end)
+                   (set-marker beg nil)
+                   (set-marker end nil))
+                 (insert (org-roam-format-link target-file-path description link-type)))
+                (t
+                 (when-let* ((title-tags-plist (-some->> title-with-tags
+                                                 (org-roam-search--query-string-to-sexp)
+                                                 (org-roam-search--stringify-query)))
+                             (title (org-roam-search--join-titles (plist-get title-tags-plist :title)))
+                             (tags (combine-and-quote-strings (plist-get title-tags-plist :tags)))
+                             (description (or description region-text title))
+                             (org-roam-capture--info `((title . ,title)
+                                                       (slug  . ,(funcall org-roam-title-to-slug-function title))))
+                             (org-roam-capture--context 'title)
+                             (org-capture-link-is-already-stored 't)
+                             (org-store-link-plist (list :description title :tags tags))
+                             (org-roam-capture-additional-template-props  (list :region (org-roam-shield-region beg end)
+                                                                                :insert-at (point-marker)
+                                                                                :link-type link-type
+                                                                                :link-description description
+                                                                                :finalize 'insert-link))
+                             (org-roam-capture-templates (or template '(("l" "from link" plain (function org-roam--capture-get-point)
+                                                                         "%?"
+                                                                         :file-name "${slug}"
+                                                                         :head "#+title: %:description
+#+roam_alias:
+#+roam_tags: stab %:tags
+#+roam_keys: %:link
+#+created: %U
+#+last_modified: %U \n"
+                                                                         :immediate-finish t
+                                                                         :unnarrowed t)))))
+                   (org-roam-capture--capture 'nil))))
+          target-file-path))
+    (deactivate-mark)))
 
 (provide 'org-roam-search)
 ;;; org-roam-search.el ends here
