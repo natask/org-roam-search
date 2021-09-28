@@ -167,7 +167,7 @@ SOURCE is not used."
   "Export helm org roam buffer into a delve."
   (interactive)
   "show `helm-org-roam' search in an `delve' buffer."
-  (let ((query (delve-show--query-string-to-sexp helm-pattern)))
+  (let ((query (org-roam-search--query-string-to-sexp helm-pattern)))
     (with-helm-alive-p
       (helm-run-after-exit (lambda () (--> (delve-show--delve-get-page query :include-titles 't :sexp 't :tag-fuzzy 't :title-fuzzy 't)
                                            (delve-new-collection-buffer (-mapcat #'delve-operate-search (delve-create-searches it))
