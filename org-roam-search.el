@@ -21,7 +21,7 @@
 (require 'org-roam)
 (require 'cl-lib)
 (require 'sexp-string)
-(require 'delve)
+(require 'delve-show)
 
 ;;; Vars:
 (defvar org-roam-search-predicates
