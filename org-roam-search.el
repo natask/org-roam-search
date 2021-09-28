@@ -279,7 +279,7 @@ If NO-CONFIRM, assume that the user does not want to modify the initial prompt."
                                                                   :file-name "${slug}"
                                                                   :head "#+title: %:description
 #+roam_alias:
-#+roam_tags: slug %:tags
+#+roam_tags: stub %:tags
 #+roam_keys: %:link
 #+created: %U
 #+last_modified: %U \n"
@@ -364,7 +364,7 @@ If DESCRIPTION is provided, use this as the link label.  See
                                                                              :file-name "${slug}"
                                                                              :head "#+title: %:description
 #+roam_alias:
-#+roam_tags: stab %:tags
+#+roam_tags: stub %:tags
 #+roam_keys: %:link
 #+created: %U
 #+last_modified: %U \n"
