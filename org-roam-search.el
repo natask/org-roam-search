@@ -22,6 +22,7 @@
 (require 'cl-lib)
 (require 'sexp-string)
 (require 'delve-show)
+(require 'helm)
 
 ;;; Vars:
 (defvar org-roam-search-predicates
@@ -227,7 +228,7 @@ Return user choice."
                   :history 'org-roam-search-history
                   :action `(("default" . ,(if action
                                               action
-                                            #'(lambda (candidate)
+                                            #'(lambda (_)
                                                 (helm-marked-candidates)))))
                   :persistent-action  #'(lambda (candidate) (-->
                                                              (org-roam-search--get-file candidate)
