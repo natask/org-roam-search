@@ -254,27 +254,6 @@ Return user choice."
           res)
         (keyboard-quit))))
 
-(defun org-roam-search--meta-to-slug (meta)
-  "Convert META data to a filename-suitable slug."
-  (cl-flet* ((nonspacing-mark-p (char)
-                                (memq char org-roam-slug-trim-chars))
-             (strip-nonspacing-marks (s)
-                                     (ucs-normalize-NFC-string
-                                      (apply #'string (seq-remove #'nonspacing-mark-p
-                                                                  (ucs-normalize-NFD-string s)))))
-             (cl-replace (title pair)
-                         (replace-regexp-in-string (car pair) (cdr pair) title)))
-    (let* ((pairs `(("[^[:alnum:][:digit:]]" . "_")  ;; convert anything not alphanumeric
-                    ("__*" . "_")  ;; remove sequential underscores
-                    ("^_" . "")  ;; remove starting underscore
-                    ("_$" . "")))  ;; remove ending underscore
-           (slug   (concat
-                    (cl-reduce (lambda (slugs tag)
-                                 (concat slugs (-reduce-from #'cl-replace (strip-nonspacing-marks tag) pairs) ".")) (plist-get meta :tags) :initial-value "")
-                    (cl-reduce (lambda (slugs title)
-                                 (concat slugs  "-" (-reduce-from #'cl-replace (strip-nonspacing-marks title) pairs))) (plist-get meta :titles) :initial-value ""))))
-      (downcase slug))))
-
 (defmacro org-roam-search--common-create-file (type)
   "Macro to Create file based on TYPE."
   (declare (indent 2) (debug (symbolp "type" form)))
@@ -285,9 +264,11 @@ Return user choice."
                (aliases (combine-and-quote-strings (plist-get title-tags-plist :aliases)))
                (tags (combine-and-quote-strings (plist-get title-tags-plist :tags)))
                (org-roam-capture--info `((title . ,title)
-                                         (slug  . ,(org-roam-search--meta-to-slug `(:titles ,(cons title
-                                                                                                   (plist-get title-tags-plist :aliases))
-                                                                                    :tags ,(plist-get title-tags-plist :tags))))))
+                                         (aliases . ,aliases)
+                                         (tags . ,tags)
+                                         (slug  . ,(funcall org-roam-meta-to-slug-function `(:titles ,(cons title
+                                                                                            (plist-get title-tags-plist :aliases))
+                                                                             :tags ,(plist-get title-tags-plist :tags))))))
                (org-roam-capture-additional-template-props (append additional-props
                                                                    ,(pcase type
                                                                       ('find   '(list :finalize 'find-file))
@@ -297,14 +278,12 @@ Return user choice."
                                                                                       :link-description title
                                                                                       :finalize 'insert-link)))))
                (org-roam-capture--context 'title)
-               (org-capture-link-is-already-stored 't)
-               (org-store-link-plist (list :description title :aliases aliases :tags tags))
                (org-roam-capture-templates (or template '(("l" "from link" plain (function org-roam--capture-get-point)
                                                            "%?"
                                                            :file-name "${slug}"
-                                                           :head "#+title: %:description
-#+roam_alias: %:aliases
-#+roam_tags: stub %:tags
+                                                           :head "#+title: ${title}
+#+roam_alias: ${aliases}
+#+roam_tags: stub ${tags}
 #+roam_keys: %:link
 #+created: %U
 #+last_modified: %U \n"
