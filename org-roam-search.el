@@ -256,7 +256,7 @@ Return user choice."
 
 (defmacro org-roam-search--common-create-file (type)
   "Macro to Create file based on TYPE."
-  (declare (indent 2) (debug (symbolp "type" form)))
+  (declare (indent 2) (debug t))
   `(when-let* ((title-tags-plist (-some->> result
                                    (org-roam-search--query-string-to-sexp)
                                    (org-roam-search--stringify-query)))
@@ -271,8 +271,8 @@ Return user choice."
                                                                              :tags ,(plist-get title-tags-plist :tags))))))
                (org-roam-capture-additional-template-props (append additional-props
                                                                    ,(pcase type
-                                                                      ('find   '(list :finalize 'find-file))
-                                                                      ('insert '(list :region (org-roam-shield-region beg end)
+                                                                      (''find   '(list :finalize 'find-file))
+                                                                      (''insert '(list :region (org-roam-shield-region beg end)
                                                                                       :insert-at (point-marker)
                                                                                       :link-type link-type
                                                                                       :link-description title
@@ -314,7 +314,7 @@ ADDITIONAL-PROPS modifies default template."
       (let ((file-path (plist-get result :path)))
         (if file-path
             (org-roam--find-file file-path)
-          (org-roam-search--common-create-file find))))))
+          (org-roam-search--common-create-file 'find))))))
 
 ;;;###autoload
 (cl-defun org-roam-search-insert (arg &key lowercase completions filter-fn description link-type template additional-props)
@@ -373,7 +373,7 @@ ADDITIONAL-PROPS modifies default template."
                        (insert (org-roam-format-link target-file-path description link-type))
                        (setq return-file-path target-file-path)))
                     (t
-                     (org-roam-search--common-create-file insert)
+                     (org-roam-search--common-create-file 'insert)
                      (setq return-file-path (org-roam-capture--get :file-path))))))))
     (deactivate-mark)))
 
