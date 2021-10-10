@@ -104,6 +104,8 @@ generated from delve enteries from org-roam completion.")
 (defvar org-roam-search--kill-buffers-list 'nil
   "List of buffers to kill when completion framework exits.
 buffers opened using persistent-action.")
+(defvar org-roam-search-default-tags 'nil
+  "List of tags to add to each file created")
 
 ;;; Code:
 (declare-function org-roam-search--query-string-to-sexp "ext:org-roam-search" (query) t)
@@ -264,28 +266,31 @@ Return user choice."
                                    (org-roam-search--stringify-query)))
                (title (org-roam-search--join-title (plist-get title-tags-plist :title)))
                (aliases (combine-and-quote-strings (plist-get title-tags-plist :aliases)))
-               (tags (combine-and-quote-strings (plist-get title-tags-plist :tags)))
+               (tags (--> (plist-get title-tags-plist :tags)
+                          (append org-roam-search-default-tags it)
+                          (seq-uniq it)
+                          (combine-and-quote-strings it)))
                (org-roam-capture--info `((title . ,title)
                                          (aliases . ,aliases)
                                          (tags . ,tags)
                                          (slug  . ,(funcall org-roam-meta-to-slug-function `(:titles ,(cons title
-                                                                                            (plist-get title-tags-plist :aliases))
-                                                                             :tags ,(plist-get title-tags-plist :tags))))))
+                                                                                                            (plist-get title-tags-plist :aliases))
+                                                                                             :tags ,(plist-get title-tags-plist :tags))))))
                (org-roam-capture-additional-template-props (append additional-props
                                                                    ,(pcase type
                                                                       (''find   '(list :finalize 'find-file))
                                                                       (''insert '(list :region (org-roam-shield-region beg end)
-                                                                                      :insert-at (point-marker)
-                                                                                      :link-type link-type
-                                                                                      :link-description title
-                                                                                      :finalize 'insert-link)))))
+                                                                                       :insert-at (point-marker)
+                                                                                       :link-type link-type
+                                                                                       :link-description title
+                                                                                       :finalize 'insert-link)))))
                (org-roam-capture--context 'title)
                (org-roam-capture-templates (or template '(("l" "from link" plain (function org-roam--capture-get-point)
                                                            "%?"
                                                            :file-name "${slug}"
                                                            :head "#+title: ${title}
 #+roam_alias: ${aliases}
-#+roam_tags: stub ${tags}
+#+roam_tags: ${tags}
 #+roam_keys: %:link
 #+created: %U
 #+last_modified: %U \n"
