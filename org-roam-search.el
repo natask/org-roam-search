@@ -56,14 +56,14 @@
     (titles :name titles :aliases '(title aliases alias)
             :transform
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
-              `(and ,@(mapcar (lambda (elem) `(like titles:title ,(rec elem))) rest))))
+              (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like titles:title ,(rec elem)))) (cons 'and rest))))
             :stringify
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
     (tags :name tags :aliases '(tag)
           :transform
           ((`(,(or 'tags 'tag) . ,rest)
-            `(and ,@(mapcar (lambda (elem) `(like tags:tags ,(rec elem))) rest))))
+            (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags:tags ,(rec elem)))) (cons 'and rest))))
           :stringify
           ((`(,(or 'tags 'tag) . ,rest)
             (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
@@ -92,6 +92,8 @@
   "Predicate default binary function.")
 (defvar org-roam-search-default-predicate 'both
   "Predicate default type.")
+(defvar org-roam-search-pex-macro 'sexp-string--custom-pexs
+  "Pex parsing macro.")
 (defvar org-roam-search-prefix-index 0
   "Index to insert user input within candidates.")
 (defvar org-roam-search-history 'nil
