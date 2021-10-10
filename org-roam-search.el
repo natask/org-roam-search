@@ -88,11 +88,11 @@
            (((pred stringp) element))))
   "Predicate list to convert string to sexp.")
 
-(defvar org-roam-search-default-predicate-boolean 'and
+(defvar org-roam-search-default-boolean 'and
   "Predicate default binary function.")
 (defvar org-roam-search-default-predicate 'both
   "Predicate default type.")
-(defvar org-roam-search-pex-macro 'sexp-string--custom-pexs
+(defvar org-roam-search-pexs-function 'sexp-string--custom-pexs
   "Pex parsing macro.")
 (defvar org-roam-search-prefix-index 0
   "Index to insert user input within candidates.")
