@@ -291,7 +291,7 @@ Return user choice."
                                                            :head "#+title: ${title}
 #+roam_alias: ${aliases}
 #+roam_tags: ${tags}
-#+roam_keys: %:link
+#+roam_keys:
 #+created: %U
 #+last_modified: %U \n"
                                                            :immediate-finish t
