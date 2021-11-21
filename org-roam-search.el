@@ -57,8 +57,8 @@
             :transform
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               `(or
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like nodes:title ,(rec elem)))) (cons 'and rest))
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases:alias ,(rec elem)))) (cons 'and rest)))))
+                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like nodes:title ,(rec elem)))) (cons 'and rest))
+                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases:alias ,(rec elem)))) (cons 'and rest)))))
             :stringify
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
@@ -66,8 +66,8 @@
           :transform
           ((`(,(or 'tags 'tag) . ,rest)
             `(or
-            ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags:tag ',(rec elem)))) (cons 'and rest))
-            ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like nodes:olp '(,(rec elem))))) (cons 'and rest)))))
+              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags:tag ',(rec elem)))) (cons 'and rest))
+              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like nodes:olp '(,(rec elem))))) (cons 'and rest)))))
           :stringify
           ((`(,(or 'tags 'tag) . ,rest)
             (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
@@ -115,8 +115,8 @@ buffers opened using persistent-action.")
 (defvar org-roam-search-default-tags 'nil
   "List of tags to add to each file created.")
 (defvar org-roam-search-default-templates  '(("l" "from link" plain "%?"
-                                                           :target  (file+head "${slug}.org"
-                                                                               ":PROPERTIES:
+                                              :target  (file+head "${slug}.org"
+                                                                  ":PROPERTIES:
 :roam_refs: ${refs}
 :roam_aliases: ${aliases}
 :END:
@@ -125,9 +125,9 @@ buffers opened using persistent-action.")
 #+roam_keys:
 #+created: %U
 #+last_modified: %U \n")
-                                                           ;:immediate-finish t
-                                                           :unnarrowed t
-                                                           ))
+                                        ;:immediate-finish t
+                                              :unnarrowed t
+                                              ))
   "See `org-roam-capture-templates'.")
 
 ;;; Code:
@@ -196,7 +196,6 @@ Return user choice."
                                                                                        " "
                                                                                        (funcall org-roam-node-annotation-function node))))  ;;NOTE: add to title. can also get node from (get-text-property 0 'node title)
                                                                   (cons title node)))) nodes))
-                                        ;:candidate-transformer (lambda (node) (org-roam-node-read--to-candidate node (org-roam-node--process-display-format org-roam-node-display-template))) ;;NOTE: handled up top within :candidates. required extra work but similar setup.
                   :fuzzy-match nil
                   :multimatch nil
                   :nohighlight t
@@ -246,34 +245,18 @@ in-place, the old list reference does not remain valid."
     (setcdr c (cons el (cdr c)))
     (cdr padded-list)))
 
-;; (defun org-roam-search-display (node-props)
-;;   (let ((prefix (propertize "[?]"
-;;                             'face 'helm-ff-prefix))
-;;         (tag (plis)
-;;     (propertize helm-pattern
-;;                     'display (concat prefix  (org-roam-search--add-tag-string
-;;                                                 (org-roam-search--join-title
-;;                                                 (plist-get it :title))
-;;                                                 (plist-get it :tags)))
-;;                                               (error ""))))
-
-;;   (concat
-;;    (when tags (propertize (org-make-tag-string tags)
-;;                           'face 'org-roam-tag))
-;;    " "
-;;    title))
-                                        ;(substring-no-properties (car (org-roam-node-read--to-candidate (org-roam-node-create :level 0 :file "" :tags tags :title title) (org-roam-node--process-display-format org-roam-node-display-template)))))
-
 (defun org-roam-search-completion--helm-candidate-transformer (candidates _source)
   "Transforms CANDIDATES for Helm-based completing read.
 SOURCE is not used."
   (let* ((node-props  (condition-case nil (--> helm-pattern
-                                                                  (org-roam-search--query-string-to-sexp it)
-                                                                  (org-roam-search--stringify-query it)
-                                                                  (plist-put it :title (org-roam-search--join-title (plist-get it :title))))
-                       (error '(:title "" :tags nil))))
-        (element (org-roam-node-read--to-candidate
-                       (apply 'org-roam-node-create node-props) (org-roam-node--process-display-format org-roam-search-node-display-template))))
+                                               (org-roam-search--query-string-to-sexp it)
+                                               (org-roam-search--stringify-query it)
+                                               (plist-put it :title (org-roam-search--join-title (plist-get it :title))))
+                        (error '(:title "" :tags nil))))
+         (prefix (propertize "[?]"             'face 'helm-ff-prefix))
+         (element (org-roam-node-read--to-candidate
+                   (apply 'org-roam-node-create node-props) (org-roam-node--process-display-format org-roam-search-node-display-template)))
+         (element (cons (concat prefix (car element)) (cdr element))))
     (org-roam-search--insert-into-list
      candidates
      element
@@ -282,9 +265,9 @@ SOURCE is not used."
 (defun org-roam-search-node-list (&optional conditions)
   "Return `org-roam-search-max' nodes stored in the database matching CONDITIONS as a list of `org-roam-node's."
   (let* ((where-clause     (if conditions
-        (car (emacsql-prepare `[:where ,conditions]))))
+                               (car (emacsql-prepare `[:where ,conditions]))))
          (limit-clause     (if org-roam-search-max
-        (format "limit %d" org-roam-search-max)))
+                               (format "limit %d" org-roam-search-max)))
          (query (concat "SELECT
   id,
   file,
@@ -346,15 +329,15 @@ FROM
     LEFT JOIN aliases ON aliases.node_id = nodes.id
     LEFT JOIN refs ON refs.node_id = nodes.id
     "
-    where-clause
-    "
+                        where-clause
+                        "
   GROUP BY nodes.id, tags.tag, aliases.alias
     "
-    limit-clause
-    ")
+                        limit-clause
+                        ")
   GROUP BY id, tags )
 GROUP BY id"))
-        (rows (org-roam-db-query query)))
+         (rows (org-roam-db-query query)))
     (cl-loop for row in rows
              append (pcase-let* ((`(,id ,file ,level ,todo ,pos ,priority ,scheduled ,deadline
                                         ,title ,properties ,olp ,atime ,mtime ,tags ,aliases ,refs)
@@ -378,47 +361,6 @@ GROUP BY id"))
                                                       :tags tags
                                                       :refs refs))
                               all-titles)))))
-
-;; TODO: handle this. note right here merge it with templates or info org-roam-capture- takes
-(defmacro org-roam-search--common-create-file (type)
-  "Macro to Create file based on TYPE."
-  (declare (indent 2) (debug t))
-  `(when-let* ((title-tags-plist (-some->> result
-                                   (org-roam-search--query-string-to-sexp)
-                                   (org-roam-search--stringify-query)))
-               (title (org-roam-search--join-title (plist-get title-tags-plist :title)))
-               (aliases (combine-and-quote-strings (plist-get title-tags-plist :aliases)))
-               (tags (--> (plist-get title-tags-plist :tags)
-                          (append org-roam-search-default-tags it)
-                          (seq-uniq it)
-                          (combine-and-quote-strings it)))
-               (org-roam-capture--info `((title . ,title)
-                                         (aliases . ,aliases)
-                                         (tags . ,tags)
-                                         (slug  . ,(funcall org-roam-meta-to-slug-function `(:titles ,(cons title
-                                                                                                            (plist-get title-tags-plist :aliases))
-                                                                                             :tags ,(plist-get title-tags-plist :tags))))))
-               (org-roam-capture-additional-template-props (append additional-props
-                                                                   ,(pcase type
-                                                                      (''find   '(list :finalize 'find-file))
-                                                                      (''insert '(list :region (org-roam-shield-region beg end)
-                                                                                       :insert-at (point-marker)
-                                                                                       :link-type link-type
-                                                                                       :link-description title
-                                                                                       :finalize 'insert-link)))))
-               (org-roam-capture--context 'title)
-               (org-roam-capture-templates (or template '(("l" "from link" plain (function org-roam--capture-get-point)
-                                                           "%?"
-                                                           :file-name "${slug}"
-                                                           :head "#+title: ${title}
-#+roam_alias: ${aliases}
-#+roam_tags: ${tags}
-#+roam_keys:
-#+created: %U
-#+last_modified: %U \n"
-                                                           :immediate-finish t
-                                                           :unnarrowed t)))))
-     (org-roam-capture--capture arg)))
 
 ;;;###autoload
 (cl-defun org-roam-search-node-find (&optional other-window initial-input filter-fn &key templates)
@@ -480,20 +422,6 @@ The INFO, if provided, is passed to the underlying `org-roam-capture-'."
                            :link-description description
                            :finalize 'insert-link))))))
     (deactivate-mark)))
-
-;; (cl-defun org-roam-search-insert (arg &key lowercase completions filter-fn description link-type template additional-props)
-;;   "Find an Org-roam file and insert org link passing ARG to `org-roam-capture'.
-;; Insert a relative org link to it at point and Return selected file if it exists.
-;; If LOWERCASE is non-nil, downcase the link description.
-;; LINK-TYPE is the type of link to be created. It defaults to \"file\".
-;; COMPLETIONS is a list of completions to be used instead of
-;; `org-roam--get-title-path-completions`.
-;; FILTER-FN is the name of a function to apply on the candidates
-;; which takes as its argument an alist of path-completions.
-;; If DESCRIPTION is provided, use this as the link label.  See
-;; `org-roam--get-title-path-completions' for details.
-;; TEMPLATE is the custom template to use for `org-roam-capture'.
-;; ADDITIONAL-PROPS modifies default template."
 
 (provide 'org-roam-search)
 ;;; org-roam-search.el ends here
