@@ -357,10 +357,10 @@ If OTHER-WINDOW, visit the NODE in another window.
 The TEMPLATES, if provided, override the list of capture templates (see
 `org-roam-capture-'.)"
   (interactive current-prefix-arg)
-  (let ((level-filter-clause (if level (format "level = %d" level)))
-        (filter-clause (org-roam-search--join-clauses filter-clause level-filter-clause))
-        (node (org-roam-search-node-read "Search node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input initial-input :filter-clause filter-clause :sort-clause sort-clause))
-        (templates (or templates org-roam-search-default-templates)))
+  (let* ((level-filter-clause (if level (format "level = %d" level)))
+         (filter-clause (org-roam-search--join-clauses filter-clause level-filter-clause))
+         (node (org-roam-search-node-read "Search node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input initial-input :filter-clause filter-clause :sort-clause sort-clause))
+         (templates (or templates org-roam-search-default-templates)))
     (if (org-roam-node-file node)
         (org-roam-node-visit node other-window)
       (org-roam-capture-
