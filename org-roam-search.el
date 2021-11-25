@@ -125,7 +125,7 @@ buffers opened using persistent-action.")
 #+roam_keys:
 #+created: %U
 #+last_modified: %U \n")
-                                        ;:immediate-finish t
+                                              :immediate-finish t
                                               :unnarrowed t))
   "See `org-roam-capture-templates'.")
 
