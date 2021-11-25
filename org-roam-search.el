@@ -57,8 +57,8 @@
             :transform
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               `(or
-                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like nodes:title ,(rec elem)))) (cons 'and rest))
-                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases:alias ,(rec elem)))) (cons 'and rest)))))
+                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like title ,(rec elem)))) (cons 'and rest))
+                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases '(,(rec elem))))) (cons 'and rest)))))
             :stringify
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
@@ -66,8 +66,8 @@
           :transform
           ((`(,(or 'tags 'tag) . ,rest)
             `(or
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags:tag ',(rec elem)))) (cons 'and rest))
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like nodes:olp '(,(rec elem))))) (cons 'and rest)))))
+              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags '(,(rec elem))))) (cons 'and rest))
+              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like olp '(,(rec elem))))) (cons 'and rest)))))
           :stringify
           ((`(,(or 'tags 'tag) . ,rest)
             (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
@@ -110,7 +110,7 @@ generated from delve enteries from org-roam completion.")
 buffers opened using persistent-action.")
 (defvar org-roam-search-node-display-template (concat (propertize "${tags}" 'face 'org-tag) " ${title}")
   "See `org-roam-node-display-template'.")
-(defvar org-roam-search-max 200
+(defvar org-roam-search-max 50
   "Max number of items displayed as candidates.")
 (defvar org-roam-search-default-tags 'nil
   "List of tags to add to each file created.")
@@ -173,6 +173,8 @@ buffers opened using persistent-action.")
   "Keymap for `org-roam-search'.")
 
 (cl-defun org-roam-search-node-read (prompt choices &key
+                                            filter-clause
+                                            sort-clause
                                             require-match initial-input
                                             action)
   "Present a PROMPT with CHOICES and optional INITIAL-INPUT.
@@ -184,7 +186,7 @@ Return user choice."
                                     (--> helm-pattern
                                          (org-roam-search--query-string-to-sexp it)
                                          (org-roam-search--transform-query it)
-                                         (org-roam-search-node-list it))
+                                         (org-roam-search-node-list :conditions it :filter-clause filter-clause :sort-clause sort-clause))
                                   (error
                                    choices)))
                   :match #'identity
@@ -262,90 +264,58 @@ SOURCE is not used."
      element
      org-roam-search-prefix-index)))
 
-(defun org-roam-search-node-list (&optional conditions)
-  "Return `org-roam-search-max' nodes stored in the database matching CONDITIONS as a list of `org-roam-node's."
-  (let* ((where-clause     (if conditions
-                               (car (emacsql-prepare `[:where ,conditions]))))
-         (limit-clause     (if org-roam-search-max
-                               (format "limit %d" org-roam-search-max)))
-         (query (concat "SELECT
-  id,
-  file,
-  \"level\",
-  todo,
-  pos,
-  priority ,
-  scheduled ,
-  deadline ,
-  title,
-  properties ,
-  olp,
-  atime,
-  mtime,
-  '(' || group_concat(tags, ' ') || ')' as tags,
-  aliases,
-  refs
-FROM
-  (
-  SELECT
-    id,
-    file,
-    \"level\",
-    todo,
-    pos,
-    priority ,
-    scheduled ,
-    deadline ,
-    title,
-    properties ,
-    olp,
-    atime,
-    mtime,
-    tags,
-    '(' || group_concat(aliases, ' ') || ')' as aliases,
-    refs
-  FROM
-    (
-    SELECT
-      nodes.id as id,
-      nodes.file as file,
-      nodes.\"level\" as \"level\",
-      nodes.todo as todo,
-      nodes.pos as pos,
-      nodes.priority as priority,
-      nodes.scheduled as scheduled,
-      nodes.deadline as deadline,
-      nodes.title as title,
-      nodes.properties as properties,
-      nodes.olp as olp,
-      files.atime as atime,
-      files.mtime as mtime,
-      tags.tag as tags,
-      aliases.alias as aliases,
-      '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
-    FROM nodes
-    LEFT JOIN files ON files.file = nodes.file
-    LEFT JOIN tags ON tags.node_id = nodes.id
-    LEFT JOIN aliases ON aliases.node_id = nodes.id
-    LEFT JOIN refs ON refs.node_id = nodes.id
-    "
-                        where-clause
-                        "
-  GROUP BY nodes.id, tags.tag, aliases.alias
-    "
-                        limit-clause
-                        ")
-  GROUP BY id, tags )
-GROUP BY id"))
+(cl-defun org-roam-search-node-list (&key conditions filter-clause sort-clause limit)
+  "Return LIMIT or `org-roam-search-max' nodes stored in the database matching CONDITIONS and FILTER-CLAUSE sorted by SORT-CLAUSE as a list of `org-roam-node's."
+  (let* ((conditions-clause (if conditions
+                                (car (emacsql-prepare `[,conditions]))))
+         (constraint-clause (pcase (cons conditions-clause filter-clause)
+                        (`(nil . ,_) filter-clause)
+                        (`(,_ . nil) conditions-clause)
+                        (`(,_ . ,_) (string-join (list "(" conditions-clause ")" "AND" "(" filter-clause ")") " "))))
+         (where-clause (if constraint-clause
+                           (concat "WHERE " constraint-clause)))
+         (order-by-clause (pcase sort-clause  ;;[(desc love) (asc this)]]
+                            ((pred vectorp)
+                             (car (emacsql-prepare `[:order-by ,sort-clause])))
+                            ((pred stringp)
+                            (concat "ORDER BY " sort-clause))
+                            (_ sort-clause)))
+         (limit-clause (if (or limit org-roam-search-max)
+                           (format "limit %d" (or limit org-roam-search-max))))
+         (query (string-join
+                 (list
+                  "SELECT id, file, filetitle, level, todo, pos, priority,
+           scheduled, deadline, title, properties, olp, atime,
+           mtime, tags, aliases, refs FROM
+           -- from clause
+             (
+             SELECT  nodes.id as id,  nodes.file as file,  nodes.level as level,
+               nodes.todo as todo,   nodes.pos as pos,  nodes.priority as priority,
+               nodes.scheduled as scheduled,  nodes.deadline as deadline,  nodes.title as title,
+               nodes.properties as properties,  nodes.olp as olp,  files.atime as atime,
+               files.title as filetitle,
+               files.mtime as mtime,  '(' || group_concat(tags.tag, ' ') || ')' as tags, '(' || group_concat(aliases.alias, ' ') || ')' as aliases,
+               '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
+             FROM nodes
+             LEFT JOIN files ON files.file = nodes.file
+             LEFT JOIN tags ON tags.node_id = nodes.id
+             LEFT JOIN aliases ON aliases.node_id = nodes.id
+             LEFT JOIN refs ON refs.node_id = nodes.id
+             GROUP BY nodes.id)
+             -- end from clause"
+                  where-clause
+                  order-by-clause
+                  limit-clause) "\n"))
          (rows (org-roam-db-query query)))
     (cl-loop for row in rows
-             append (pcase-let* ((`(,id ,file ,level ,todo ,pos ,priority ,scheduled ,deadline
+             append (pcase-let* ((`(,id ,file ,file-title ,level ,todo ,pos ,priority ,scheduled ,deadline
                                         ,title ,properties ,olp ,atime ,mtime ,tags ,aliases ,refs)
                                   row)
                                  (all-titles (cons title aliases)))
                       (mapcar (lambda (temp-title)
                                 (org-roam-node-create :id id
                                                       :file file
+                                                      :file-title file-title
                                                       :file-atime atime
                                                       :file-mtime mtime
                                                       :level level
@@ -363,16 +333,16 @@ GROUP BY id"))
                               all-titles)))))
 
 ;;;###autoload
-(cl-defun org-roam-search-node-find (&optional other-window initial-input filter-fn &key templates)
+(cl-defun org-roam-search-node-find (&optional other-window initial-input filter-clause &key sort-clause templates)
   "Find and open an Org-roam node by its title or alias.
 INITIAL-INPUT is the initial input for the prompt.
-FILTER-FN is a function to filter out nodes: it takes an `org-roam-node',
+FILTER-CLAUSE is a string that is compatible with sql query.
 and when nil is returned the node will be filtered out.
 If OTHER-WINDOW, visit the NODE in another window.
 The TEMPLATES, if provided, override the list of capture templates (see
 `org-roam-capture-'.)"
   (interactive current-prefix-arg)
-  (let ((node (org-roam-search-node-read "Search node:" (org-roam-search-node-list) :initial-input initial-input))
+  (let ((node (org-roam-search-node-read "Search node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input initial-input :filter-clause filter-clause :sort-clause sort-clause))
         (templates (or templates org-roam-search-default-templates)))
     (if (org-roam-node-file node)
         (org-roam-node-visit node other-window)
@@ -399,7 +369,7 @@ The INFO, if provided, is passed to the underlying `org-roam-capture-'."
                     (setq beg (set-marker (make-marker) (region-beginning)))
                     (setq end (set-marker (make-marker) (region-end)))
                     (setq region-text (org-link-display-format (buffer-substring-no-properties beg end)))))
-               (node (org-roam-search-node-read "Insert node:" (org-roam-search-node-list) :initial-input region-text))
+               (node (org-roam-search-node-read "Insert node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input region-text :filter-clause filter-clause :sort-clause sort-clause))
                (description (or region-text
                                 (org-roam-node-formatted node))))
           (if (org-roam-node-id node)
