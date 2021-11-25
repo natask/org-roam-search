@@ -336,7 +336,8 @@ SOURCE is not used."
 (cl-defun org-roam-search-node-find (&optional other-window initial-input filter-clause &key sort-clause templates)
   "Find and open an Org-roam node by its title or alias.
 INITIAL-INPUT is the initial input for the prompt.
-FILTER-CLAUSE is a string that is compatible with sql query.
+FILTER-CLAUSE is a filter string that is compatible with sql query.
+SORT-CLAUSE is a sort string that is compatible with sql query.
 and when nil is returned the node will be filtered out.
 If OTHER-WINDOW, visit the NODE in another window.
 The TEMPLATES, if provided, override the list of capture templates (see
@@ -352,9 +353,10 @@ The TEMPLATES, if provided, override the list of capture templates (see
        :props '(:finalize find-file)))))
 
 ;;;###autoload
-(cl-defun org-roam-search-node-insert (&optional filter-fn &key templates info)
+(cl-defun org-roam-search-node-insert (&optional filter-clause &key sort-clause templates info)
   "Find an Org-roam node and insert (where the point is) an \"id:\" link to it.
-FILTER-FN is a function to filter out nodes: it takes an `org-roam-node',
+FILTER-CLAUSE is a filter string that is compatible with sql query.
+SORT-CLAUSE is a sort string that is compatible with sql query.
 and when nil is returned the node will be filtered out.
 The TEMPLATES, if provided, override the list of capture templates (see
 `org-roam-capture-'.)
