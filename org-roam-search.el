@@ -368,6 +368,7 @@ The TEMPLATES, if provided, override the list of capture templates (see
        :templates templates
        :props '(:finalize find-file)))))
 
+;;;###autoload
 (cl-defun org-roam-search-file-find (&optional other-window initial-input filter-clause &key templates)
   "Find and open an file level Org-roam node by its title or alias.
 INITIAL-INPUT is the initial input for the prompt.
@@ -378,7 +379,7 @@ If OTHER-WINDOW, visit the NODE in another window.
 The TEMPLATES, if provided, override the list of capture templates (see
 `org-roam-capture-'.)"
   (interactive)
-  (org-roam-search-level-node-find other-window initial-input filter-clause :templates templates :level 0))
+  (org-roam-search-node-find other-window initial-input filter-clause :templates templates :level 0))
 
 ;;;###autoload
 (cl-defun org-roam-search-node-insert (&optional filter-clause &key sort-clause templates info)
