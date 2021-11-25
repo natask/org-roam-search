@@ -268,10 +268,7 @@ SOURCE is not used."
   "Return LIMIT or `org-roam-search-max' nodes stored in the database matching CONDITIONS and FILTER-CLAUSE sorted by SORT-CLAUSE as a list of `org-roam-node's."
   (let* ((conditions-clause (if conditions
                                 (car (emacsql-prepare `[,conditions]))))
-         (constraint-clause (pcase (cons conditions-clause filter-clause)
-                        (`(nil . ,_) filter-clause)
-                        (`(,_ . nil) conditions-clause)
-                        (`(,_ . ,_) (string-join (list "(" conditions-clause ")" "AND" "(" filter-clause ")") " "))))
+         (constraint-clause (org-roam-search--join-clauses conditions-clause filter-clause))
          (where-clause (if constraint-clause
                            (concat "WHERE " constraint-clause)))
          (order-by-clause (pcase sort-clause  ;;[(desc love) (asc this)]]
@@ -332,18 +329,37 @@ SOURCE is not used."
                                                       :refs refs))
                               all-titles)))))
 
+(defun org-roam-search--join-clauses (&rest clauses)
+  "Join sql CLAUSES appropriately."
+ (reduce
+   (lambda (joined-clauses clause)
+     (if (and clause (not (string-empty-p clause)))
+         (if (and joined-clauses (not (string-empty-p joined-clauses)))
+         (string-join
+          (list "(" joined-clauses ")"
+                "AND"
+                "(" clause ")")
+          " ")
+        clause)
+       joined-clauses))
+   clauses
+   :initial-value nil))
+
 ;;;###autoload
-(cl-defun org-roam-search-node-find (&optional other-window initial-input filter-clause &key sort-clause templates)
+(cl-defun org-roam-search-node-find (&optional other-window initial-input filter-clause &key sort-clause templates level)
   "Find and open an Org-roam node by its title or alias.
 INITIAL-INPUT is the initial input for the prompt.
 FILTER-CLAUSE is a filter string that is compatible with sql query.
 SORT-CLAUSE is a sort string that is compatible with sql query.
 and when nil is returned the node will be filtered out.
+IF LEVEL, limit to nodes with level LEVEL.
 If OTHER-WINDOW, visit the NODE in another window.
 The TEMPLATES, if provided, override the list of capture templates (see
 `org-roam-capture-'.)"
   (interactive current-prefix-arg)
-  (let ((node (org-roam-search-node-read "Search node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input initial-input :filter-clause filter-clause :sort-clause sort-clause))
+  (let ((level-filter-clause (if level (format "level = %d" level)))
+        (filter-clause (org-roam-search--join-clauses filter-clause level-filter-clause))
+        (node (org-roam-search-node-read "Search node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input initial-input :filter-clause filter-clause :sort-clause sort-clause))
         (templates (or templates org-roam-search-default-templates)))
     (if (org-roam-node-file node)
         (org-roam-node-visit node other-window)
@@ -351,6 +367,18 @@ The TEMPLATES, if provided, override the list of capture templates (see
        :node node
        :templates templates
        :props '(:finalize find-file)))))
+
+(cl-defun org-roam-search-file-find (&optional other-window initial-input filter-clause &key templates)
+  "Find and open an file level Org-roam node by its title or alias.
+INITIAL-INPUT is the initial input for the prompt.
+FILTER-CLAUSE is a filter string that is compatible with sql query.
+SORT-CLAUSE is a sort string that is compatible with sql query.
+and when nil is returned the node will be filtered out.
+If OTHER-WINDOW, visit the NODE in another window.
+The TEMPLATES, if provided, override the list of capture templates (see
+`org-roam-capture-'.)"
+  (interactive)
+  (org-roam-search-level-node-find other-window initial-input filter-clause :templates templates :level 0))
 
 ;;;###autoload
 (cl-defun org-roam-search-node-insert (&optional filter-clause &key sort-clause templates info)
