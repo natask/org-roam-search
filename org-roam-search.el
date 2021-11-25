@@ -9,7 +9,7 @@
 ;; Version: 0.0.1
 ;; Keywords: matching,org-roam
 ;; Homepage: https://github.com/savnkk/org-roam-search
-;; Package-Requires: ((emacs "26.1") (org-roam "1.2.3") (sexp-string "0.0.1"))
+;; Package-Requires: ((emacs "26.1") (org "9.3") (org-roam "1.2.3") (sexp-string "0.0.1"))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -126,8 +126,7 @@ buffers opened using persistent-action.")
 #+created: %U
 #+last_modified: %U \n")
                                         ;:immediate-finish t
-                                              :unnarrowed t
-                                              ))
+                                              :unnarrowed t))
   "See `org-roam-capture-templates'.")
 
 ;;; Code:
@@ -140,24 +139,22 @@ buffers opened using persistent-action.")
 (fset 'org-roam-search--stringify-query (sexp-string--define-transform-query-fn "org-roam-search" :stringify))
 
 
-;;;; org-roam to delve and back export :: TODO: do manage the delve export
-(defun delve-export-org-roam ()
-  "Export delve items into a org roam popup buffer."
+;;;; org-roam to delve and back export
+(defun org-roam-search-import-from-delve ()
+  "Import from delve items into a org roam popup buffer."
   (interactive)
-  (org-roam-search-find-file :initial-prompt org-roam-search--delve-local-query))
+  (org-roam-search-node-find :initial-input org-roam-search--delve-local-query))
 
-(defun helm-export-org-roam ()
-  "Export helm org roam buffer into a delve."
+(defun org-roam-search-export-to-delve ()
+  "Export helm org roam buffer into a delve buffer."
   (interactive)
   "show `helm-org-roam' search in an `delve' buffer."
   (let ((query (org-roam-search--query-string-to-sexp helm-pattern)))
     (with-helm-alive-p
-      (helm-run-after-exit (lambda () (--> (delve-show--delve-get-page query :include-titles 't :sexp 't :tag-fuzzy 't :title-fuzzy 't)
-                                           (delve-new-collection-buffer (-mapcat #'delve-operate-search (delve-create-searches it))
-                                                                        (delve--pretty-main-buffer-header)
-                                                                        "Roam Export")
+      (helm-run-after-exit (lambda () (--> (delve-show-create-query query :include-titles 't :sexp 't :tag-fuzzy 't :title-fuzzy 't)
+                                           (switch-to-buffer (delve--new-buffer "Roam Export" (list it)))
                                            (with-current-buffer it
-                                             (local-set-key (kbd "M-a E") #'delve-export-org-roam)
+                                             (local-set-key (kbd "M-a E") #'org-roam-search-import-from-delve)
                                              (setq-local org-roam-search--delve-local-query helm-pattern)
                                              it)
                                            (switch-to-buffer it))
@@ -168,7 +165,7 @@ buffers opened using persistent-action.")
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map helm-map)
     (define-key map (kbd "M-a") #'nil)
-    (define-key map (kbd "M-a E") #'helm-export-org-roam) ;; embark type export
+    (define-key map (kbd "M-a E") #'org-roam-search-export-to-delve) ;; embark type export
     map)
   "Keymap for `org-roam-search'.")
 
@@ -179,6 +176,7 @@ buffers opened using persistent-action.")
                                             action)
   "Present a PROMPT with CHOICES and optional INITIAL-INPUT.
 If REQUIRE-MATCH is t, the user must select one of the CHOICES.
+FILTER-CLAUSE and SORT-CLAUSE are arguments to `org-roam-search-node-list'.
 Return user choice."
   (let ((source (helm-make-source prompt 'helm-source-sync
                   :candidates (lambda ()
@@ -331,7 +329,7 @@ SOURCE is not used."
 
 (defun org-roam-search--join-clauses (&rest clauses)
   "Join sql CLAUSES appropriately."
- (reduce
+ (cl-reduce
    (lambda (joined-clauses clause)
      (if (and clause (not (string-empty-p clause)))
          (if (and joined-clauses (not (string-empty-p joined-clauses)))
@@ -346,7 +344,7 @@ SOURCE is not used."
    :initial-value nil))
 
 ;;;###autoload
-(cl-defun org-roam-search-node-find (&optional other-window initial-input filter-clause &key sort-clause templates level)
+(cl-defun org-roam-search-node-find (&key other-window initial-input filter-clause sort-clause templates level)
   "Find and open an Org-roam node by its title or alias.
 INITIAL-INPUT is the initial input for the prompt.
 FILTER-CLAUSE is a filter string that is compatible with sql query.
@@ -369,7 +367,7 @@ The TEMPLATES, if provided, override the list of capture templates (see
        :props '(:finalize find-file)))))
 
 ;;;###autoload
-(cl-defun org-roam-search-file-find (&optional other-window initial-input filter-clause &key templates)
+(defun org-roam-search-file-find (&rest args)
   "Find and open an file level Org-roam node by its title or alias.
 INITIAL-INPUT is the initial input for the prompt.
 FILTER-CLAUSE is a filter string that is compatible with sql query.
@@ -377,12 +375,14 @@ SORT-CLAUSE is a sort string that is compatible with sql query.
 and when nil is returned the node will be filtered out.
 If OTHER-WINDOW, visit the NODE in another window.
 The TEMPLATES, if provided, override the list of capture templates (see
-`org-roam-capture-'.)"
+`org-roam-capture-'.)
+taking ARGS."
+  (declare (advertised-calling-convention (&key other-window initial-input filter-clause templates) nil))
   (interactive)
-  (org-roam-search-node-find other-window initial-input filter-clause :templates templates :level 0))
+  (apply 'org-roam-search-node-find (plist-put args :level 0)))
 
 ;;;###autoload
-(cl-defun org-roam-search-node-insert (&optional filter-clause &key sort-clause templates info)
+(cl-defun org-roam-search-node-insert (&key filter-clause sort-clause templates info)
   "Find an Org-roam node and insert (where the point is) an \"id:\" link to it.
 FILTER-CLAUSE is a filter string that is compatible with sql query.
 SORT-CLAUSE is a sort string that is compatible with sql query.
