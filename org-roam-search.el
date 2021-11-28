@@ -58,7 +58,7 @@
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               `(or
                 ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like title ,(rec elem)))) (cons 'and rest))
-                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases '(,(rec elem))))) (cons 'and rest)))))
+                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases ',(rec elem)))) (cons 'and rest)))))
             :stringify
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
@@ -66,8 +66,8 @@
           :transform
           ((`(,(or 'tags 'tag) . ,rest)
             `(or
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags '(,(rec elem))))) (cons 'and rest))
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like olp '(,(rec elem))))) (cons 'and rest)))))
+              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec elem)))) (cons 'and rest))
+              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like olp ',(rec elem)))) (cons 'and rest)))))
           :stringify
           ((`(,(or 'tags 'tag) . ,rest)
             (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
