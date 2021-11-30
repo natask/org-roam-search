@@ -62,26 +62,45 @@
             :stringify
             ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
               (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
-    (tags :name tags :aliases '(tag context)
+    (tags :name tags :aliases '(tag)
           :transform
           ((`(,(or 'tags 'tag) . ,rest)
-            `(or
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec elem)))) (cons 'and rest))
-              ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like olp ',(rec elem)))) (cons 'and rest)))))
+              (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec elem)))) (cons 'and rest))))
           :stringify
           ((`(,(or 'tags 'tag) . ,rest)
             (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
-    (both :name both
+    (olp :name olp
+         :transform
+         ((`(olp . ,rest)
+           `(or
+             ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like filetitle ',(rec elem)))) (cons 'and rest))
+             ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like olp ',(rec elem)))) (cons 'and rest)))))
+         :stringify
+         ((`(olp . ,rest)
+           (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
+    (context :name context
+             :transform
+     ((`(context . ,rest)
+         (rec `(or (tags ,@rest)
+                   (olp ,@rest)))))
+     :stringify
+     ((`(,(or 'tags 'tag) . ,rest)
+       (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
+    (level :name level :aliases '(l d depth)
           :transform
-          ((`(both . ,rest)
-            (rec `(or (tags ,@rest)
+          ((`(,(or 'level 'l 'd 'depth) . ,rest)
+            (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(= level ,(string-to-number elem)))) (cons 'and rest)))))
+    (all :name all
+          :transform
+          ((`(all . ,rest)
+            (rec `(or (context ,@rest)
                       (titles ,@rest)))))
           :search
-          ((`(both . ,rest)
+          ((`(all . ,rest)
             (list :title (plist-get (rec `(titles ,@rest) accum) :title)
-                  :tags (plist-get (rec `(tags ,@rest) accum) :tags))))
+                  :tags (plist-get (rec `(context ,@rest) accum) :tags))))
           :stringify
-          ((`(both . ,rest)
+          ((`(all . ,rest)
             (plist-put accum :title (-concat (plist-get accum :title) rest)))))
     (query :name query
            :transform
