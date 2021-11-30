@@ -113,7 +113,7 @@
 
 (defvar org-roam-search-default-boolean 'and
   "Predicate default binary function.")
-(defvar org-roam-search-default-predicate 'both
+(defvar org-roam-search-default-predicate 'all
   "Predicate default type.")
 (defvar org-roam-search-pexs-function 'sexp-string--custom-pexs
   "Pex parsing macro.")
@@ -168,13 +168,13 @@ buffers opened using persistent-action.")
   "Export helm org roam buffer into a delve buffer."
   (interactive)
   "show `helm-org-roam' search in an `delve' buffer."
-  (let ((query (org-roam-search--query-string-to-sexp helm-pattern)))
+  (let ((query helm-pattern))
     (with-helm-alive-p
-      (helm-run-after-exit (lambda () (--> (delve-show-create-query query :include-titles 't :sexp 't :tag-fuzzy 't :title-fuzzy 't)
+      (helm-run-after-exit (lambda () (--> (delve-show-create-query query :include-titles 't :tag-fuzzy 't :title-fuzzy 't)
                                            (switch-to-buffer (delve--new-buffer "Roam Export" (list it)))
                                            (with-current-buffer it
                                              (local-set-key (kbd "M-a E") #'org-roam-search-import-from-delve)
-                                             (setq-local org-roam-search--delve-local-query helm-pattern)
+                                             (setq-local org-roam-search--delve-local-query query)
                                              it)
                                            (switch-to-buffer it))
                              nil)))))
