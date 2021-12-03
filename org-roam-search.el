@@ -84,7 +84,7 @@
          (rec `(or (tags ,@rest)
                    (olp ,@rest)))))
      :stringify
-     ((`(,(or 'tags 'tag) . ,rest)
+     ((`(context . ,rest)
        (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
     (level :name level :aliases '(l d depth)
           :transform
