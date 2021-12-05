@@ -281,7 +281,7 @@ SOURCE is not used."
      element
      org-roam-search-prefix-index)))
 
-(cl-defun org-roam-search-node-list (&key conditions filter-clause sort-clause limit)
+(cl-defun org-roam-search-node-list (&key conditions filter-clause link-clause sort-clause limit)
   "Return LIMIT or `org-roam-search-max' nodes stored in the database matching CONDITIONS and FILTER-CLAUSE sorted by SORT-CLAUSE as a list of `org-roam-node's."
   (let* ((conditions-clause (if conditions
                                 (car (emacsql-prepare `[,conditions]))))
@@ -296,6 +296,11 @@ SOURCE is not used."
                             (_ sort-clause)))
          (limit-clause (if (or limit org-roam-search-max)
                            (format "limit %d" (or limit org-roam-search-max))))
+         (node-query [:select [(as links.dest link_dest) (as links.pos link_pos) (as links.properties link_properties)
+             (as citations.cite_key cite_key) (as citations.pos cite_pos) (as citations.properties cite_properties)]
+                       :from links
+                       :left-join citations
+                       :where li])
          (query (string-join
                  (list
                   "
