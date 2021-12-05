@@ -292,31 +292,48 @@ SOURCE is not used."
                             ((pred vectorp)
                              (car (emacsql-prepare `[:order-by ,sort-clause])))
                             ((pred stringp)
-                            (concat "ORDER BY " sort-clause))
+                             (concat "ORDER BY " sort-clause))
                             (_ sort-clause)))
          (limit-clause (if (or limit org-roam-search-max)
                            (format "limit %d" (or limit org-roam-search-max))))
          (query (string-join
                  (list
                   "SELECT id, file, filetitle, level, todo, pos, priority,
-           scheduled, deadline, title, properties, olp, atime,
-           mtime, tags, aliases, refs FROM
-           -- from clause
-             (
-             SELECT  nodes.id as id,  nodes.file as file,  nodes.level as level,
-               nodes.todo as todo,   nodes.pos as pos,  nodes.priority as priority,
-               nodes.scheduled as scheduled,  nodes.deadline as deadline,  nodes.title as title,
-               nodes.properties as properties,  nodes.olp as olp,  files.atime as atime,
-               files.title as filetitle,
-               files.mtime as mtime,  '(' || group_concat(tags.tag, ' ') || ')' as tags, '(' || group_concat(aliases.alias, ' ') || ')' as aliases,
-               '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
-             FROM nodes
-             LEFT JOIN files ON files.file = nodes.file
-             LEFT JOIN tags ON tags.node_id = nodes.id
-             LEFT JOIN aliases ON aliases.node_id = nodes.id
-             LEFT JOIN refs ON refs.node_id = nodes.id
-             GROUP BY nodes.id)
-             -- end from clause"
+    scheduled, deadline, title, properties, olp, atime,
+    mtime, tags, aliases, refs FROM
+      (
+      SELECT id, file, filetitle, \"level\", todo, pos, priority,
+        scheduled, deadline, title, properties, olp, atime,
+        mtime, '(' || group_concat(tags, ' ') || ')' as tags,
+        aliases, refs, dest FROM
+        -- outer from clause
+        (
+        SELECT  id,  file, filetitle, \"level\", todo,  pos, priority,  scheduled, deadline ,
+          title, properties, olp, atime,  mtime, tags,
+          '(' || group_concat(aliases, ' ') || ')' as aliases,
+          refs, dest
+        FROM
+        -- inner from clause
+          (
+          SELECT  nodes.id as id,  nodes.file as file,  nodes.\"level\" as \"level\",
+            nodes.todo as todo,   nodes.pos as pos,  nodes.priority as priority,
+            nodes.scheduled as scheduled,  nodes.deadline as deadline,  nodes.title as title,
+            nodes.properties as properties,  nodes.olp as olp,  files.atime as atime,
+            files.title as filetitle,
+            files.mtime as mtime,  tags.tag as tags,    aliases.alias as aliases,
+            '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs,
+            links.dest as dest, links.pos as pos, links.properties as properties
+          FROM nodes
+          LEFT JOIN files ON files.file = nodes.file
+          LEFT JOIN tags ON tags.node_id = nodes.id
+          LEFT JOIN aliases ON aliases.node_id = nodes.id
+          LEFT JOIN refs ON refs.node_id = nodes.id
+          LEFT JOIN links ON links.source = nodes.id
+          GROUP BY nodes.id, tags.tag, aliases.alias )
+        -- end inner from clause
+        GROUP BY id, tags )
+        --- end outer from clause
+      GROUP BY id)"
                   where-clause
                   order-by-clause
                   limit-clause) "\n"))
