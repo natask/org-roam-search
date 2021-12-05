@@ -298,21 +298,21 @@ SOURCE is not used."
                            (format "limit %d" (or limit org-roam-search-max))))
          (query (string-join
                  (list
-                  "SELECT id, file, filetitle, level, todo, pos, priority,
+                  "
+SELECT id, file, filetitle, level, todo, pos, priority,
+  scheduled, deadline, title, properties, olp,
+  atime, mtime, tags, aliases, refs FROM
+  (
+  SELECT id, file, filetitle, \"level\", todo, pos, priority,
     scheduled, deadline, title, properties, olp, atime,
-    mtime, tags, aliases, refs FROM
+    mtime, '(' || group_concat(tags, ' ') || ')' as tags,
+    aliases, refs FROM
+    -- outer from clause
       (
-      SELECT id, file, filetitle, \"level\", todo, pos, priority,
-        scheduled, deadline, title, properties, olp, atime,
-        mtime, '(' || group_concat(tags, ' ') || ')' as tags,
-        aliases, refs, dest FROM
-        -- outer from clause
-        (
-        SELECT  id,  file, filetitle, \"level\", todo,  pos, priority,  scheduled, deadline ,
-          title, properties, olp, atime,  mtime, tags,
-          '(' || group_concat(aliases, ' ') || ')' as aliases,
-          refs, dest
-        FROM
+      SELECT  id,  file, filetitle, \"level\", todo,  pos, priority,  scheduled, deadline ,
+        title, properties, olp, atime,  mtime, tags,
+        '(' || group_concat(aliases, ' ') || ')' as aliases,
+        refs FROM
         -- inner from clause
           (
           SELECT  nodes.id as id,  nodes.file as file,  nodes.\"level\" as \"level\",
@@ -321,19 +321,17 @@ SOURCE is not used."
             nodes.properties as properties,  nodes.olp as olp,  files.atime as atime,
             files.title as filetitle,
             files.mtime as mtime,  tags.tag as tags,    aliases.alias as aliases,
-            '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs,
-            links.dest as dest, links.pos as pos, links.properties as properties
+            '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
           FROM nodes
-          LEFT JOIN files ON files.file = nodes.file
-          LEFT JOIN tags ON tags.node_id = nodes.id
-          LEFT JOIN aliases ON aliases.node_id = nodes.id
-          LEFT JOIN refs ON refs.node_id = nodes.id
-          LEFT JOIN links ON links.source = nodes.id
+            LEFT JOIN files ON files.file = nodes.file
+            LEFT JOIN tags ON tags.node_id = nodes.id
+            LEFT JOIN aliases ON aliases.node_id = nodes.id
+            LEFT JOIN refs ON refs.node_id = nodes.id
           GROUP BY nodes.id, tags.tag, aliases.alias )
         -- end inner from clause
-        GROUP BY id, tags )
-        --- end outer from clause
-      GROUP BY id)"
+      GROUP BY id, tags )
+    -- end outer from clause
+  GROUP BY id)"
                   where-clause
                   order-by-clause
                   limit-clause) "\n"))
