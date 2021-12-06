@@ -9,7 +9,7 @@
 ;; Version: 0.0.1
 ;; Keywords: matching,org-roam
 ;; Homepage: https://github.com/savnkk/org-roam-search
-;; Package-Requires: ((emacs "26.1") (org "9.3") (org-roam "1.2.3") (sexp-string "0.0.1"))
+;; Package-Requires: ((emacs "26.1") (org "9.3") (org-roam "2") (sexp-string "0.0.1") (delve-show) (helm))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -25,92 +25,8 @@
 (require 'helm)
 
 ;;; Vars:
-(defvar org-roam-search-predicates
-  '((or  :name or  :transform
-         ((`(or . ,clauses) `(or ,@(mapcar #' rec clauses))))
-         :stringify
-         ((`(or . ,clauses) (cl-reduce (lambda (acc elem)
-                                         (let ((res (rec elem)))
-                                           ;; HACK: works because plist-get grabs the first it can find.
-                                           ;; Here it grabs the most recently computed value.
-                                           ;; This means need to reverse
-                                           ;; while presevering order of subsequent Even and Odd
-                                           ;; index elements
-                                           (-concat res acc)))
-                                       clauses :initial-value accum))))
-    (not :name not :transform
-         ((`(not . ,clauses) `(not ,@(mapcar #' rec clauses)))))
-    (and :name and
-         :transform
-         ((`(and . ,clauses) `(and ,@(mapcar #' rec clauses))))
-         :stringify
-         ((`(and . ,clauses) (cl-reduce (lambda (acc elem)
-                                          (let ((res (rec elem)))
-                                            (list :title (-concat (plist-get acc :title)
-                                                                  (plist-get res :title))
-                                                  :aliases (-concat (plist-get acc :aliases)
-                                                                    (plist-get res :aliases))
-                                                  :tags (-concat (plist-get acc :tags)
-                                                                 (plist-get res :tags)))))
-                                        clauses :initial-value accum))))
-    (titles :name titles :aliases '(title aliases alias)
-            :transform
-            ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
-              `(or
-                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like title ,(rec elem)))) (cons 'and rest))
-                ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases ',(rec elem)))) (cons 'and rest)))))
-            :stringify
-            ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
-              (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
-    (tags :name tags :aliases '(tag)
-          :transform
-          ((`(,(or 'tags 'tag) . ,rest)
-              (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec elem)))) (cons 'and rest))))
-          :stringify
-          ((`(,(or 'tags 'tag) . ,rest)
-            (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
-    (olp :name olp
-         :transform
-         ((`(olp . ,rest)
-           `(or
-             ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like filetitle ',(rec elem)))) (cons 'and rest))
-             ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like olp ',(rec elem)))) (cons 'and rest)))))
-         :stringify
-         ((`(olp . ,rest)
-           (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
-    (context :name context
-             :transform
-     ((`(context . ,rest)
-         (rec `(or (tags ,@rest)
-                   (olp ,@rest)))))
-     :stringify
-     ((`(context . ,rest)
-       (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
-    (level :name level :aliases '(l d depth)
-          :transform
-          ((`(,(or 'level 'l 'd 'depth) . ,rest)
-            (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(= level ,(string-to-number elem)))) (cons 'and rest)))))
-    (all :name all
-          :transform
-          ((`(all . ,rest)
-            (rec `(or (context ,@rest)
-                      (titles ,@rest)))))
-          :search
-          ((`(all . ,rest)
-            (list :title (plist-get (rec `(titles ,@rest) accum) :title)
-                  :tags (plist-get (rec `(context ,@rest) accum) :tags))))
-          :stringify
-          ((`(all . ,rest)
-            (plist-put accum :title (-concat (plist-get accum :title) rest)))))
-    (query :name query
-           :transform
-           (((pred stringp) (concat "%%" element "%%")))
-           :search
-           (((pred stringp) element))
-           :stringify
-           (((pred stringp) element))))
-  "Predicate list to convert string to sexp.")
-
+(defvar org-roam-search-predicates 'nil
+    "Predicate list to convert string to sexp.")
 (defvar org-roam-search-default-boolean 'and
   "Predicate default binary function.")
 (defvar org-roam-search-default-predicate 'all
@@ -149,14 +65,143 @@ buffers opened using persistent-action.")
   "See `org-roam-capture-templates'.")
 
 ;;; Code:
+(defun org-roam-search--boolean-transform (boolean)
+  "Transform expression for BOOLEAN predicate."
+  `((`(,',boolean . ,clauses) (if-let ((clauses (-non-nil (mapcar #'rec clauses))))
+                        `(,',boolean ,@clauses)))))
+
+(defun org-roam-search--define-predicates ()
+  "Define `org-roam-search-predicates'."
+  (setq org-roam-search-predicates
+        `((or  :name or
+               :transform
+               ,(org-roam-search--boolean-transform 'or)
+               :transform-source
+               ,(org-roam-search--boolean-transform 'or)
+               :transform-destination
+               ,(org-roam-search--boolean-transform 'or)
+               :stringify
+               ((`(or . ,clauses) (cl-reduce (lambda (acc elem)
+                                               (let ((res (rec elem)))
+                                                 ;; HACK: works because plist-get grabs the first it can find.
+                                                 ;; Here it grabs the most recently computed value.
+                                                 ;; This means need to reverse
+                                                 ;; while presevering order of subsequent Even and Odd
+                                                 ;; index elements
+                                                 (-concat res acc)))
+                                             clauses :initial-value accum))))
+          (not :name not
+               :transform
+               ,(org-roam-search--boolean-transform 'not)
+               :transform-source
+               ,(org-roam-search--boolean-transform 'not)
+               :transform-destination
+               ,(org-roam-search--boolean-transform 'not))
+          (and :name and
+               :transform
+               ,(org-roam-search--boolean-transform 'and)
+               :transform-source
+               ,(org-roam-search--boolean-transform 'and)
+               :transform-destination
+               ,(org-roam-search--boolean-transform 'and)
+               :stringify
+               ((`(and . ,clauses) (cl-reduce (lambda (acc elem)
+                                                (let ((res (rec elem)))
+                                                  (list :title (-concat (plist-get acc :title)
+                                                                        (plist-get res :title))
+                                                        :aliases (-concat (plist-get acc :aliases)
+                                                                          (plist-get res :aliases))
+                                                        :tags (-concat (plist-get acc :tags)
+                                                                       (plist-get res :tags)))))
+                                              clauses :initial-value accum))))
+          (titles :name titles :aliases '(title aliases alias)
+                  :transform
+                  ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
+                    `(or
+                      ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like title ,(rec elem)))) (cons 'and rest))
+                      ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like aliases ',(rec elem)))) (cons 'and rest)))))
+                  :stringify
+                  ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
+                    (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
+          (tags :name tags :aliases '(tag)
+                :transform
+                ((`(,(or 'tags 'tag) . ,rest)
+                  (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec elem)))) (cons 'and rest))))
+                :stringify
+                ((`(,(or 'tags 'tag) . ,rest)
+                  (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
+          (olp :name olp
+               :transform
+               ((`(olp . ,rest)
+                 `(or
+                   ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like filetitle ',(rec elem)))) (cons 'and rest))
+                   ,(-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like olp ',(rec elem)))) (cons 'and rest)))))
+               :stringify
+               ((`(olp . ,rest)
+                 (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
+          (context :name context
+                   :transform
+                   ((`(context . ,rest)
+                     (rec `(or (tags ,@rest)
+                               (olp ,@rest)))))
+                   :stringify
+                   ((`(context . ,rest)
+                     (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
+          (destination :name destination :aliases '(dest)
+                       :transform-destination
+                       ((`(,(or 'dest 'destination) . ,rest)
+                         (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like dest ,(rec (s-replace-regexp org-link-plain-re "\\2" elem))))) (cons 'and rest)))))
+          (source :name source
+                  :transform-source
+                  ((`(source . ,rest)
+                    (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like source ,(rec (s-replace-regexp org-link-plain-re "\\2" elem))))) (cons 'and rest)))))
+          (level :name level :aliases '(l d depth)
+                 :transform
+                 ((`(,(or 'level 'l 'd 'depth) . ,rest)
+                   (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(= level ,(string-to-number elem)))) (cons 'and rest)))))
+          (all :name all
+               :transform
+               ((`(all . ,rest)
+                 (rec `(or (context ,@rest)
+                           (titles ,@rest)))))
+               :search
+               ((`(all . ,rest)
+                 (list :title (plist-get (rec `(titles ,@rest) accum) :title)
+                       :tags (plist-get (rec `(context ,@rest) accum) :tags))))
+               :stringify
+               ((`(all . ,rest)
+                 (plist-put accum :title (-concat (plist-get accum :title) rest)))))
+          (skip :transform
+                (((pred listp)))
+                :transform-source
+                (((pred listp)))
+                :transform-destination
+                (((pred listp))))
+          (query :name query
+                 :transform
+                 (((pred stringp) (concat "%%" element "%%")))
+                 :transform-source
+                 (((pred stringp) (concat "%%" element "%%")))
+                 :transform-destination
+                 (((pred stringp) (concat "%%" element "%%")))
+                 :search
+                 (((pred stringp) element))
+                 :stringify
+                 (((pred stringp) element))))))
+
 (declare-function org-roam-search--query-string-to-sexp "ext:org-roam-search" (query) t)
 (declare-function org-roam-search--transform-query "ext:org-roam-search" (query) t)
 (declare-function org-roam-search--stringify-query "ext:org-roam-search" (query) t)
-(fset 'org-roam-search--query-string-to-sexp
-      (sexp-string--define-query-string-to-sexp-fn  "org-roam-search"))
+(org-roam-search--define-predicates)
+(fset 'org-roam-search--query-string-to-sexp (sexp-string--define-query-string-to-sexp-fn "org-roam-search"))
 (fset 'org-roam-search--transform-query (sexp-string--define-transform-query-fn "org-roam-search" :transform))
+(fset 'org-roam-search--transform-source-query (sexp-string--define-transform-query-fn "org-roam-search" :transform-source))
+(fset 'org-roam-search--transform-destination-query (sexp-string--define-transform-query-fn "org-roam-search" :transform-destination))
 (fset 'org-roam-search--stringify-query (sexp-string--define-transform-query-fn "org-roam-search" :stringify))
 
+(defun org-roam-search-map-entry (type)
+  `(= level ,(string-to-number elem)
+  (-tree-map (lambda (elem) (if (member elem '(or and)) elem type))) (cons 'and rest)))
 
 ;;;; org-roam to delve and back export
 (defun org-roam-search-import-from-delve ()
@@ -200,10 +245,9 @@ Return user choice."
   (let ((source (helm-make-source prompt 'helm-source-sync
                   :candidates (lambda ()
                                 (condition-case nil
-                                    (--> helm-pattern
-                                         (org-roam-search--query-string-to-sexp it)
-                                         (org-roam-search--transform-query it)
-                                         (org-roam-search-node-list :conditions it :filter-clause filter-clause :sort-clause sort-clause))
+                                 (org-roam-search-node-list :input-string helm-pattern
+                                                            :filter-clause filter-clause
+                                                            :sort-clause sort-clause)
                                   (error
                                    choices)))
                   :match #'identity
@@ -281,11 +325,51 @@ SOURCE is not used."
      element
      org-roam-search-prefix-index)))
 
-(cl-defun org-roam-search-node-list (&key conditions filter-clause link-clause sort-clause limit)
-  "Return LIMIT or `org-roam-search-max' nodes stored in the database matching CONDITIONS and FILTER-CLAUSE sorted by SORT-CLAUSE as a list of `org-roam-node's."
-  (let* ((conditions-clause (if conditions
+(defun org-roam-search--join-vecs (&rest vecs)
+  "Join emacsql VECS appropriately."
+  (cl-reduce
+   (lambda (joined-vecs vec)
+     (if vec
+         (if joined-vecs
+             `[,@joined-vecs
+               :union
+               ,@vec]
+           vec)
+       joined-vecs))
+   vecs
+   :initial-value nil))
+
+(cl-defun org-roam-search-node-list (&key (input-string "") filter-clause sort-clause limit)
+  "Return LIMIT or `org-roam-search-max' nodes stored in the database matching INPUT-STRING and FILTER-CLAUSE sorted by SORT-CLAUSE as a list of `org-roam-node's.
+
+INPUT-STRING is a string that searchs for nodes according `org-roam-search-predicates'.
+SORT-CLAUSE is a sql string that filters nodes.
+LIMIT is the maximum resultant nodes."
+  (let* ((query-sexp (org-roam-search--query-string-to-sexp input-string))
+         (conditions (org-roam-search--transform-query query-sexp))
+         (node-source-conditions (org-roam-search--transform-source-query query-sexp))
+         (node-destination-conditions (org-roam-search--transform-destination-query query-sexp))
+         (conditions-clause (if conditions
                                 (car (emacsql-prepare `[,conditions]))))
-         (constraint-clause (org-roam-search--join-clauses conditions-clause filter-clause))
+         (destination-nodes-query (if node-source-conditions
+                                 `[:select :distinct [dest]
+                                   :from links
+                                   :where ,node-source-conditions
+                                   :limit ,(or limit org-roam-search-max)]));; TODO: support citations and searching with refs in the future.
+         (source-nodes-query (if node-destination-conditions
+                               `[:select :distinct [source]
+                                 :from links
+                                 :where ,node-destination-conditions
+                                 :limit ,(or limit org-roam-search-max)]))
+         (nodes-query (org-roam-search--join-vecs source-nodes-query destination-nodes-query))
+         (nodes-clause (-some--> nodes-query
+                         (org-roam-db-query it)
+                         (mapcar (lambda (node)
+                                   `(= id ,(car node))) it)
+                         (cons 'or it)
+                         (emacsql-prepare `[,it])
+                         (car it)))
+         (constraint-clause (org-roam-search--join-clauses conditions-clause filter-clause nodes-clause))
          (where-clause (if constraint-clause
                            (concat "WHERE " constraint-clause)))
          (order-by-clause (pcase sort-clause  ;;[(desc love) (asc this)]]
@@ -296,11 +380,6 @@ SOURCE is not used."
                             (_ sort-clause)))
          (limit-clause (if (or limit org-roam-search-max)
                            (format "limit %d" (or limit org-roam-search-max))))
-         (node-query [:select [(as links.dest link_dest) (as links.pos link_pos) (as links.properties link_properties)
-             (as citations.cite_key cite_key) (as citations.pos cite_pos) (as citations.properties cite_properties)]
-                       :from links
-                       :left-join citations
-                       :where li])
          (query (string-join
                  (list
                   "
