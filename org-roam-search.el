@@ -26,7 +26,7 @@
 
 ;;; Vars:
 (defvar org-roam-search-predicates 'nil
-    "Predicate list to convert string to sexp.")
+  "Predicate list to convert string to sexp.")
 (defvar org-roam-search-default-boolean 'and
   "Predicate default binary function.")
 (defvar org-roam-search-default-predicate 'all
@@ -68,7 +68,7 @@ buffers opened using persistent-action.")
 (defun org-roam-search--boolean-transform (boolean)
   "Transform expression for BOOLEAN predicate."
   `((`(,',boolean . ,clauses) (if-let ((clauses (-non-nil (mapcar #'rec clauses))))
-                        `(,',boolean ,@clauses)))))
+                                  `(,',boolean ,@clauses)))))
 
 (defun org-roam-search--define-predicates ()
   "Define `org-roam-search-predicates'."
@@ -201,7 +201,7 @@ buffers opened using persistent-action.")
 
 (defun org-roam-search-map-entry (type)
   `(= level ,(string-to-number elem)
-  (-tree-map (lambda (elem) (if (member elem '(or and)) elem type))) (cons 'and rest)))
+      (-tree-map (lambda (elem) (if (member elem '(or and)) elem type))) (cons 'and rest)))
 
 ;;;; org-roam to delve and back export
 (defun org-roam-search-import-from-delve ()
@@ -226,12 +226,23 @@ buffers opened using persistent-action.")
 
 ;;;; org roam helm interface ::
 (defconst org-roam-search-map
-  (let ((map (make-sparse-keymap)))
-    (set-keymap-parent map helm-map)
+  (let ((map (make-composed-keymap nil minibuffer-local-map)))
     (define-key map (kbd "M-a") #'nil)
     (define-key map (kbd "M-a E") #'org-roam-search-export-to-delve) ;; embark type export
     map)
   "Keymap for `org-roam-search'.")
+
+(setq org-roam-search--current-nodes 'nil)
+(setq org-roam-search--current-string "")
+
+(defun org-roam-search-node-read--to-candidate (node template)
+  "Return a minibuffer completion candidate given NODE.
+TEMPLATE is the processed template used to format the entry."
+  (let ((candidate-main (org-roam-node--format-entry
+                         template
+                         node
+                         (1- (frame-width)))))
+    (cons (propertize candidate-main 'node node) node)))
 
 (cl-defun org-roam-search-node-read (prompt choices &key
                                             filter-clause
@@ -242,53 +253,67 @@ buffers opened using persistent-action.")
 If REQUIRE-MATCH is t, the user must select one of the CHOICES.
 FILTER-CLAUSE and SORT-CLAUSE are arguments to `org-roam-search-node-list'.
 Return user choice."
-  (let ((source (helm-make-source prompt 'helm-source-sync
-                  :candidates (lambda ()
-                                (condition-case nil
-                                 (org-roam-search-node-list :input-string helm-pattern
-                                                            :filter-clause filter-clause
-                                                            :sort-clause sort-clause)
-                                  (error
-                                   choices)))
-                  :match #'identity
-                  :candidate-transformer (lambda (nodes)
-                                           (mapcar
-                                            (lambda (node) (--> (org-roam-node-read--to-candidate node (org-roam-node--process-display-format org-roam-node-display-template))
-                                                                (-let* (((title . node) it)
-                                                                        (title (concat (substring-no-properties title)
-                                                                                       " "
-                                                                                       (funcall org-roam-node-annotation-function node))))  ;;NOTE: add to title. can also get node from (get-text-property 0 'node title)
-                                                                  (cons title node)))) nodes))
-                  :fuzzy-match nil
-                  :multimatch nil
-                  :nohighlight t
-                  :keymap 'org-roam-search-map
-                  :history 'org-roam-search-history
-                  :action `(("default" . ,(if action
-                                              action
-                                            #'(lambda (_)
-                                                (helm-marked-candidates)))))
-                  :persistent-action  #'(lambda (candidate) (let ((condition (find-buffer-visiting (org-roam-node-file candidate)))
-                                                                  (buffer (org-roam-node-visit candidate 't)))
-                                                              (unless condition
-                                                                (add-to-list 'org-roam-search--kill-buffers-list buffer))))
-                  :volatile t
-                  :group 'org-roam
-                  :filtered-candidate-transformer
-                  (and (not require-match)
-                       #'org-roam-search-completion--helm-candidate-transformer)))
-        (buf (concat "*org-roam-search "
-                     (s-downcase (s-chop-suffix ":" (s-trim prompt)))
-                     "*")))
-    (or (let ((res (helm :sources source
-                         :input initial-input
-                         :prompt prompt
-                         :buffer buf)))
-          (dolist (buf org-roam-search--kill-buffers-list)
-            (kill-buffer buf))
-          (setq org-roam-search--kill-buffers-list 'nil)
-          (car res))
-        (keyboard-quit))))
+  (unwind-protect
+      ;; Group functions together to avoid inconsistent state on quit
+      (atomic-change-group
+        (let* ((choices (mapcar (lambda (node) (org-roam-search-node-read--to-candidate node (org-roam-node--process-display-format org-roam-node-display-template))) choices))
+               (node (completing-read
+                      prompt
+                      (lambda (string pred action)
+                        (cond
+                         ((eq (car-safe action) 'boundaries)
+                                        ;(print `(boundaries ,(length string) . ,(length (cdr action))))
+                          `(boundaries ,(length string) . ,(length (cdr action))))
+                         ((eq action 'metadata)
+                                        ;(print string)
+                          `(metadata
+                            .
+                            ;; Preserve sorting in the completion UI
+                            ((display-sort-function . identity)
+                             (cycle-sort-function . identity)
+                             (annotation-function
+                              . ,(lambda (title)
+                                   (funcall org-roam-node-annotation-function
+                                            (get-text-property 0 'node title))))
+                             (category . org-roam-search-node))))
+                         ((null action) ;; try-completion
+                          string)
+                         ((eq action 'lambda) ;;test-completions
+                          't)
+                         ((eq action t) ;; all-completions
+                          (let ((nodes (cond
+                                        ;; ((string-equal (string-trim string) org-roam-search--current-string)
+                                        ;;   org-roam-search--current-nodes)
+                                        (t
+                                         (-as-> (condition-case nil
+                                                    (mapcar
+                                                     (lambda (node) (org-roam-search-node-read--to-candidate node (org-roam-node--process-display-format org-roam-node-display-template)))
+                                                     (org-roam-search-node-list :input-string string
+                                                                                :filter-clause filter-clause
+                                                                                :sort-clause sort-clause))
+                                                  (error
+                                                   choices)) nodes
+                                                   (if (not require-match)
+                                                       (org-roam-search-completion--insert-default-candidate string nodes)
+                                                     nodes)
+                                                   (prog1
+                                                     nodes
+                                                     (setq org-roam-search--current-nodes nodes)
+                                                     (setq org-roam-search--current-string string)))))))
+                            (cl-loop for node in nodes
+                                     for y from 1
+                                     collect (car node))))))
+                      nil require-match initial-input 'org-roam-search-history))
+               ;; :keymap 'org-roam-search-map
+               ;; :persistent-action  #'(lambda (candidate) (let ((condition (find-buffer-visiting (org-roam-node-file candidate)))
+               ;;                                               (buffer (org-roam-node-visit candidate 't)))
+               ;;                                         (unless condition
+               ;;                                         (add-to-list 'org-roam-search--kill-buffers-list buffer))))
+               ;; (dolist (buf org-roam-search--kill-buffers-list) ;
+               ;;   (kill-buffer buf))
+               ;; (setq org-roam-search--kill-buffers-list 'nil)
+               )
+          (cdr (assoc node org-roam-search--current-nodes))))))
 
 (defun org-roam-search--join-title (title-lt)
   "Join strings within TITLE-LT to one string."
@@ -308,10 +333,9 @@ in-place, the old list reference does not remain valid."
     (setcdr c (cons el (cdr c)))
     (cdr padded-list)))
 
-(defun org-roam-search-completion--helm-candidate-transformer (candidates _source)
-  "Transforms CANDIDATES for Helm-based completing read.
-SOURCE is not used."
-  (let* ((node-props  (condition-case nil (--> helm-pattern
+(defun org-roam-search-completion--insert-default-candidate (input-string candidates)
+  "Insert default candidate based on INPUT-STRING into CANDIDATES."
+  (let* ((node-props  (condition-case nil (--> input-string
                                                (org-roam-search--query-string-to-sexp it)
                                                (org-roam-search--stringify-query it)
                                                (plist-put it :title (org-roam-search--join-title (plist-get it :title))))
@@ -352,15 +376,15 @@ LIMIT is the maximum resultant nodes."
          (conditions-clause (if conditions
                                 (car (emacsql-prepare `[,conditions]))))
          (destination-nodes-query (if node-source-conditions
-                                 `[:select :distinct [dest]
-                                   :from links
-                                   :where ,node-source-conditions
-                                   :limit ,(or limit org-roam-search-max)]));; TODO: support citations and searching with refs in the future.
+                                      `[:select :distinct [dest]
+                                        :from links
+                                        :where ,node-source-conditions
+                                        :limit ,(or limit org-roam-search-max)]));; TODO: support citations and searching with refs in the future.
          (source-nodes-query (if node-destination-conditions
-                               `[:select :distinct [source]
-                                 :from links
-                                 :where ,node-destination-conditions
-                                 :limit ,(or limit org-roam-search-max)]))
+                                 `[:select :distinct [source]
+                                   :from links
+                                   :where ,node-destination-conditions
+                                   :limit ,(or limit org-roam-search-max)]))
          (nodes-query (org-roam-search--join-vecs source-nodes-query destination-nodes-query))
          (nodes-clause (-some--> nodes-query
                          (org-roam-db-query it)
@@ -447,16 +471,16 @@ SELECT id, file, filetitle, level, todo, pos, priority,
 
 (defun org-roam-search--join-clauses (&rest clauses)
   "Join sql CLAUSES appropriately."
- (cl-reduce
+  (cl-reduce
    (lambda (joined-clauses clause)
      (if (and clause (not (string-empty-p clause)))
          (if (and joined-clauses (not (string-empty-p joined-clauses)))
-         (string-join
-          (list "(" joined-clauses ")"
-                "AND"
-                "(" clause ")")
-          " ")
-        clause)
+             (string-join
+              (list "(" joined-clauses ")"
+                    "AND"
+                    "(" clause ")")
+              " ")
+           clause)
        joined-clauses))
    clauses
    :initial-value nil))
