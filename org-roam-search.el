@@ -6,7 +6,7 @@
 ;; Maintainer: Natnael Kahssay <thisnkk@gmail.com>
 ;; Created: August 30, 2021
 ;; Modified: August 30, 2021
-;; Version: 0.0.1
+;; Version: 0.0.2
 ;; Keywords: matching,org-roam
 ;; Homepage: https://github.com/savnkk/org-roam-search
 ;; Package-Requires: ((emacs "26.1") (org "9.3") (org-roam "2") (sexp-string "0.0.1") (delve-show) (helm))
