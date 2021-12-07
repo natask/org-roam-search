@@ -27,7 +27,7 @@
 
 ;;; Vars:
 (defvar org-roam-search-predicates 'nil
-    "Predicate list to convert string to sexp.")
+  "Predicate list to convert string to sexp.")
 (defvar org-roam-search-default-boolean 'and
   "Predicate default binary function.")
 (defvar org-roam-search-default-predicate 'all
@@ -188,21 +188,21 @@ buffers opened using persistent-action.")
 (org-roam-search--define-predicates)
 
 (defun org-roam-search--query-string-to-sexp (input &optional boolean)
-"Parse string INPUT where BOOLEAN is default boolean.
+  "Parse string INPUT where BOOLEAN is default boolean.
 Look at `sexp-string--query-string-to-sexp' for more information."
-    (sexp-string--query-string-to-sexp :input input
-                                       :predicates org-roam-search-predicates
-                                       :default-boolean (or boolean org-roam-search-default-boolean)
-                                       :default-predicate org-roam-search-default-predicate
-                                       :pex-function org-roam-search-pex-function))
+  (sexp-string--query-string-to-sexp :input input
+                                     :predicates org-roam-search-predicates
+                                     :default-boolean (or boolean org-roam-search-default-boolean)
+                                     :default-predicate org-roam-search-default-predicate
+                                     :pex-function org-roam-search-pex-function))
 
 (defun org-roam-search--transform-query (query type)
   "Return transformed form of QUERY against TYPE.
 Look at `sexp-string--transform-query' for more information."
-    (sexp-string--transform-query :query query
-                                  :type type
-                                  :predicates org-roam-search-predicates
-                                  :ignore 't))
+  (sexp-string--transform-query :query query
+                                :type type
+                                :predicates org-roam-search-predicates
+                                :ignore 't))
 
 (defun org-roam-search--transform-source-query (query)
   "Return transformed form of QUERY against `:source'.
@@ -231,7 +231,7 @@ Look at `sexp-string--transform-query' for more information."
 
 (defun org-roam-search-map-entry (type)
   `(= level ,(string-to-number elem)
-  (-tree-map (lambda (elem) (if (member elem '(or and)) elem type))) (cons 'and rest)))
+      (-tree-map (lambda (elem) (if (member elem '(or and)) elem type))) (cons 'and rest)))
 
 ;;;; org-roam to delve and back export
 (defun org-roam-search-import-from-delve ()
@@ -275,9 +275,9 @@ Return user choice."
   (let ((source (helm-make-source prompt 'helm-source-sync
                   :candidates (lambda ()
                                 (condition-case nil
-                                 (org-roam-search-node-list :input-string helm-pattern
-                                                            :filter-clause filter-clause
-                                                            :sort-clause sort-clause)
+                                    (org-roam-search-node-list :input-string helm-pattern
+                                                               :filter-clause filter-clause
+                                                               :sort-clause sort-clause)
                                   (error
                                    choices)))
                   :match #'identity
@@ -382,15 +382,15 @@ LIMIT is the maximum resultant nodes."
          (conditions-clause (if conditions
                                 (car (emacsql-prepare `[,conditions]))))
          (destination-nodes-query (if node-source-conditions
-                                 `[:select :distinct [dest]
-                                   :from links
-                                   :where ,node-source-conditions
-                                   :limit ,(or limit org-roam-search-max)]));; TODO: support citations and searching with refs in the future.
+                                      `[:select :distinct [dest]
+                                        :from links
+                                        :where ,node-source-conditions
+                                        :limit ,(or limit org-roam-search-max)]));; TODO: support citations and searching with refs in the future.
          (source-nodes-query (if node-destination-conditions
-                               `[:select :distinct [source]
-                                 :from links
-                                 :where ,node-destination-conditions
-                                 :limit ,(or limit org-roam-search-max)]))
+                                 `[:select :distinct [source]
+                                   :from links
+                                   :where ,node-destination-conditions
+                                   :limit ,(or limit org-roam-search-max)]))
          (nodes-query (org-roam-search--join-vecs source-nodes-query destination-nodes-query))
          (nodes-clause (-some--> nodes-query
                          (org-roam-db-query it)
@@ -477,16 +477,16 @@ SELECT id, file, filetitle, level, todo, pos, priority,
 
 (defun org-roam-search--join-clauses (&rest clauses)
   "Join sql CLAUSES appropriately."
- (cl-reduce
+  (cl-reduce
    (lambda (joined-clauses clause)
      (if (and clause (not (string-empty-p clause)))
          (if (and joined-clauses (not (string-empty-p joined-clauses)))
-         (string-join
-          (list "(" joined-clauses ")"
-                "AND"
-                "(" clause ")")
-          " ")
-        clause)
+             (string-join
+              (list "(" joined-clauses ")"
+                    "AND"
+                    "(" clause ")")
+              " ")
+           clause)
        joined-clauses))
    clauses
    :initial-value nil))
