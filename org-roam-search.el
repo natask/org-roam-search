@@ -9,7 +9,7 @@
 ;; Version: 0.0.2
 ;; Keywords: matching,org-roam
 ;; Homepage: https://github.com/savnkk/org-roam-search
-;; Package-Requires: ((emacs "26.1") (org "9.3") (org-roam "2") (sexp-string "0.0.1") (delve-show) (helm))
+;; Package-Requires: ((emacs "26.1") (org "9.3") (org-roam "2") (sexp-string "0.0.2") (delve-show) (helm) (dash))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -22,6 +22,7 @@
 (require 'cl-lib)
 (require 'sexp-string)
 (require 'delve-show)
+(require 'dash)
 (require 'helm)
 
 ;;; Vars:
@@ -31,7 +32,7 @@
   "Predicate default binary function.")
 (defvar org-roam-search-default-predicate 'all
   "Predicate default type.")
-(defvar org-roam-search-pexs-function 'sexp-string--custom-pexs
+(defvar org-roam-search-pex-function 'sexp-string--custom-pexs
   "Pex parsing macro.")
 (defvar org-roam-search-prefix-index 0
   "Index to insert user input within candidates.")
@@ -65,10 +66,11 @@ buffers opened using persistent-action.")
   "See `org-roam-capture-templates'.")
 
 ;;; Code:
+
+;;; sexp-string library integration
 (defun org-roam-search--boolean-transform (boolean)
   "Transform expression for BOOLEAN predicate."
-  `((`(,',boolean . ,clauses) (if-let ((clauses (-non-nil (mapcar #'rec clauses))))
-                        `(,',boolean ,@clauses)))))
+  `((`(,',boolean . ,clauses) (cons ',boolean (mapcar #'rec clauses)))))
 
 (defun org-roam-search--define-predicates ()
   "Define `org-roam-search-predicates'."
@@ -76,9 +78,9 @@ buffers opened using persistent-action.")
         `((or  :name or
                :transform
                ,(org-roam-search--boolean-transform 'or)
-               :transform-source
+               :source
                ,(org-roam-search--boolean-transform 'or)
-               :transform-destination
+               :destination
                ,(org-roam-search--boolean-transform 'or)
                :stringify
                ((`(or . ,clauses) (cl-reduce (lambda (acc elem)
@@ -93,16 +95,16 @@ buffers opened using persistent-action.")
           (not :name not
                :transform
                ,(org-roam-search--boolean-transform 'not)
-               :transform-source
+               :source
                ,(org-roam-search--boolean-transform 'not)
-               :transform-destination
+               :destination
                ,(org-roam-search--boolean-transform 'not))
           (and :name and
                :transform
                ,(org-roam-search--boolean-transform 'and)
-               :transform-source
+               :source
                ,(org-roam-search--boolean-transform 'and)
-               :transform-destination
+               :destination
                ,(org-roam-search--boolean-transform 'and)
                :stringify
                ((`(and . ,clauses) (cl-reduce (lambda (acc elem)
@@ -114,7 +116,7 @@ buffers opened using persistent-action.")
                                                         :tags (-concat (plist-get acc :tags)
                                                                        (plist-get res :tags)))))
                                               clauses :initial-value accum))))
-          (titles :name titles :aliases '(title aliases alias)
+          (titles :name titles :aliases (title aliases alias)
                   :transform
                   ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
                     `(or
@@ -123,7 +125,7 @@ buffers opened using persistent-action.")
                   :stringify
                   ((`(,(or 'titles 'title 'aliases 'alias) . ,rest)
                     (plist-put accum :aliases (append (plist-get accum :aliases) rest)))))
-          (tags :name tags :aliases '(tag)
+          (tags :name tags :aliases (tag)
                 :transform
                 ((`(,(or 'tags 'tag) . ,rest)
                   (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec elem)))) (cons 'and rest))))
@@ -147,15 +149,15 @@ buffers opened using persistent-action.")
                    :stringify
                    ((`(context . ,rest)
                      (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
-          (destination :name destination :aliases '(dest)
-                       :transform-destination
+          (destination :name destination :aliases (dest)
+                       :destination
                        ((`(,(or 'dest 'destination) . ,rest)
                          (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like dest ,(rec (s-replace-regexp org-link-plain-re "\\2" elem))))) (cons 'and rest)))))
           (source :name source
-                  :transform-source
+                  :source
                   ((`(source . ,rest)
                     (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like source ,(rec (s-replace-regexp org-link-plain-re "\\2" elem))))) (cons 'and rest)))))
-          (level :name level :aliases '(l d depth)
+          (level :name level :aliases (l d depth)
                  :transform
                  ((`(,(or 'level 'l 'd 'depth) . ,rest)
                    (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(= level ,(string-to-number elem)))) (cons 'and rest)))))
@@ -171,33 +173,61 @@ buffers opened using persistent-action.")
                :stringify
                ((`(all . ,rest)
                  (plist-put accum :title (-concat (plist-get accum :title) rest)))))
-          (skip :transform
-                (((pred listp)))
-                :transform-source
-                (((pred listp)))
-                :transform-destination
-                (((pred listp))))
           (query :name query
                  :transform
                  (((pred stringp) (concat "%%" element "%%")))
-                 :transform-source
+                 :source
                  (((pred stringp) (concat "%%" element "%%")))
-                 :transform-destination
+                 :destination
                  (((pred stringp) (concat "%%" element "%%")))
                  :search
                  (((pred stringp) element))
                  :stringify
                  (((pred stringp) element))))))
 
-(declare-function org-roam-search--query-string-to-sexp "ext:org-roam-search" (query) t)
-(declare-function org-roam-search--transform-query "ext:org-roam-search" (query) t)
-(declare-function org-roam-search--stringify-query "ext:org-roam-search" (query) t)
 (org-roam-search--define-predicates)
-(fset 'org-roam-search--query-string-to-sexp (sexp-string--define-query-string-to-sexp-fn "org-roam-search"))
-(fset 'org-roam-search--transform-query (sexp-string--define-transform-query-fn "org-roam-search" :transform))
-(fset 'org-roam-search--transform-source-query (sexp-string--define-transform-query-fn "org-roam-search" :transform-source))
-(fset 'org-roam-search--transform-destination-query (sexp-string--define-transform-query-fn "org-roam-search" :transform-destination))
-(fset 'org-roam-search--stringify-query (sexp-string--define-transform-query-fn "org-roam-search" :stringify))
+
+(defun org-roam-search--query-string-to-sexp (input &optional boolean)
+"Parse string INPUT where BOOLEAN is default boolean.
+Look at `sexp-string--query-string-to-sexp' for more information."
+    (sexp-string--query-string-to-sexp :input input
+                                       :predicates org-roam-search-predicates
+                                       :default-boolean (or boolean org-roam-search-default-boolean)
+                                       :default-predicate org-roam-search-default-predicate
+                                       :pex-function org-roam-search-pex-function))
+
+(defun org-roam-search--transform-query (query type)
+  "Return transformed form of QUERY against TYPE.
+Look at `sexp-string--transform-query' for more information."
+    (sexp-string--transform-query :query query
+                                  :type type
+                                  :predicates org-roam-search-predicates
+                                  :ignore 't))
+
+(defun org-roam-search--transform-source-query (query)
+  "Return transformed form of QUERY against `:source'.
+Look at `sexp-string--transform-query' for more information."
+  (sexp-string--transform-query :query query
+                                :type :source
+                                :predicates org-roam-search-predicates
+                                :ignore 't))
+
+(defun org-roam-search--transform-destination-query (query)
+  "Return transformed form of QUERY against `:destination'.
+Look at `sexp-string--transform-query' for more information."
+  (sexp-string--transform-query :query query
+                                :type :destination
+                                :predicates org-roam-search-predicates
+                                :ignore 't))
+
+(defun org-roam-search--stringify-query (query)
+  "Return transformed form of QUERY against `:stringify'.
+Look at `sexp-string--transform-query' for more information."
+  (sexp-string--transform-query :query query
+                                :type :stringify
+                                :predicates org-roam-search-predicates
+                                :ignore 't))
+
 
 (defun org-roam-search-map-entry (type)
   `(= level ,(string-to-number elem)
@@ -313,7 +343,7 @@ in-place, the old list reference does not remain valid."
 SOURCE is not used."
   (let* ((node-props  (condition-case nil (--> helm-pattern
                                                (org-roam-search--query-string-to-sexp it)
-                                               (org-roam-search--stringify-query it)
+                                               (org-roam-search--transform-query it :stringify)
                                                (plist-put it :title (org-roam-search--join-title (plist-get it :title))))
                         (error '(:title "" :tags nil))))
          (prefix (propertize "[?]"             'face 'helm-ff-prefix))
@@ -346,9 +376,9 @@ INPUT-STRING is a string that searchs for nodes according `org-roam-search-predi
 SORT-CLAUSE is a sql string that filters nodes.
 LIMIT is the maximum resultant nodes."
   (let* ((query-sexp (org-roam-search--query-string-to-sexp input-string))
-         (conditions (org-roam-search--transform-query query-sexp))
-         (node-source-conditions (org-roam-search--transform-source-query query-sexp))
-         (node-destination-conditions (org-roam-search--transform-destination-query query-sexp))
+         (conditions (org-roam-search--transform-query query-sexp :transform))
+         (node-source-conditions (org-roam-search--transform-query query-sexp :source))
+         (node-destination-conditions (org-roam-search--transform-query query-sexp :destination))
          (conditions-clause (if conditions
                                 (car (emacsql-prepare `[,conditions]))))
          (destination-nodes-query (if node-source-conditions
