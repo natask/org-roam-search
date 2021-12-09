@@ -58,7 +58,6 @@ buffers opened using persistent-action.")
 :END:
 #+title: ${title}
 #+filetags: ${tags}
-#+roam_keys:
 #+created: %U
 #+last_modified: %U \n")
                                               :immediate-finish t
@@ -344,9 +343,10 @@ SOURCE is not used."
   (let* ((node-props  (condition-case nil (--> helm-pattern
                                                (org-roam-search--query-string-to-sexp it)
                                                (org-roam-search--transform-query it :stringify)
-                                               (plist-put it :title (org-roam-search--join-title (plist-get it :title))))
+                                               (plist-put it :title (org-roam-search--join-title (plist-get it :title)))
+                                               (plist-put it :tags (append org-roam-search-default-tags (plist-get it :tags))))
                         (error '(:title "" :tags nil))))
-         (prefix (propertize "[?]"             'face 'helm-ff-prefix))
+         (prefix (propertize "[?]" 'face 'helm-ff-prefix))
          (element (org-roam-node-read--to-candidate
                    (apply 'org-roam-node-create node-props) (org-roam-node--process-display-format org-roam-search-node-display-template)))
          (element (cons (concat prefix (car element)) (cdr element))))
