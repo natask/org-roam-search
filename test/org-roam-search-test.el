@@ -157,5 +157,18 @@
               :to-equal
               res))))
 
+(describe "org-roam-search--verify-tags"
+  (it "works"
+    (expect (org-roam-search--verify-tags '("happy here" "all gone#$$^@"))
+            :to-have-same-items-as
+            '("happy_here" "all_gone#___@")))
+
+  (it "integrates with transform query"
+    (expect (--> "tag:\"happy here\",well"
+                 (org-roam-search--query-string-to-sexp it)
+                 (org-roam-search--transform-query it :transform))
+            :to-have-same-items-as
+            '(and (like tags '"%%happy_here%%") (like tags '"%%well%%")))))
+
 (provide 'org-roam-search-test)
 ;;; org-roam-search-test.el ends here
