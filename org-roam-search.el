@@ -199,10 +199,10 @@ Look at `sexp-string--query-string-to-sexp' for more information."
   "Return transformed form of QUERY against TYPE.
 Look at `sexp-string--transform-query' for more information."
   (sexp-string-collapse-list (sexp-string--transform-query
-                               :query query
-                               :type type
-                               :predicates org-roam-search-predicates
-                               :ignore 't)))
+                              :query query
+                              :type type
+                              :predicates org-roam-search-predicates
+                              :ignore 't)))
 
 (defun org-roam-search--transform-source-query (query)
   "Return transformed form of QUERY against `:source'.
@@ -329,7 +329,7 @@ Return user choice."
           (dolist (buf org-roam-search--kill-buffers-list)
             (kill-buffer buf))
           (setq org-roam-search--kill-buffers-list 'nil)
-          (car res))
+          res)
         (keyboard-quit))))
 
 (defun org-roam-search--join-title (title-lt)
@@ -518,14 +518,15 @@ The TEMPLATES, if provided, override the list of capture templates (see
   (interactive current-prefix-arg)
   (let* ((level-filter-clause (if level (format "level = %d" level)))
          (filter-clause (org-roam-search--join-clauses filter-clause level-filter-clause))
-         (node (org-roam-search-node-read "Search node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input initial-input :filter-clause filter-clause :sort-clause sort-clause))
+         (nodes (org-roam-search-node-read "Search node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input initial-input :filter-clause filter-clause :sort-clause sort-clause))
          (templates (or templates org-roam-search-default-templates)))
-    (if (org-roam-node-file node)
-        (org-roam-node-visit node other-window)
-      (org-roam-capture-
-       :node node
-       :templates templates
-       :props '(:finalize find-file)))))
+    (dolist (node nodes)
+      (if (org-roam-node-file node)
+          (org-roam-node-visit node other-window)
+        (org-roam-capture-
+         :node node
+         :templates templates
+         :props '(:finalize find-file))))))
 
 ;;;###autoload
 (defun org-roam-search-file-find (&rest args)
@@ -561,28 +562,30 @@ The INFO, if provided, is passed to the underlying `org-roam-capture-'."
                     (setq beg (set-marker (make-marker) (region-beginning)))
                     (setq end (set-marker (make-marker) (region-end)))
                     (setq region-text (org-link-display-format (buffer-substring-no-properties beg end)))))
-               (node (org-roam-search-node-read "Insert node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input region-text :filter-clause filter-clause :sort-clause sort-clause))
-               (description (or region-text
-                                (org-roam-node-formatted node))))
-          (if (org-roam-node-id node)
-              (progn
-                (when region-text
-                  (delete-region beg end)
-                  (set-marker beg nil)
-                  (set-marker end nil))
-                (insert (org-link-make-string
-                         (concat "id:" (org-roam-node-id node))
-                         description)))
-            (org-roam-capture-
-             :node node
-             :info info
-             :templates (or templates org-roam-search-default-templates)
-             :props (append
-                     (when (and beg end)
-                       (list :region (cons beg end)))
-                     (list :insert-at (point-marker)
-                           :link-description description
-                           :finalize 'insert-link))))))
+               (nodes (org-roam-search-node-read "Insert node:" (org-roam-search-node-list :filter-clause filter-clause :sort-clause sort-clause) :initial-input region-text :filter-clause filter-clause :sort-clause sort-clause)))
+          (dolist (node nodes)
+            (let ((description (or region-text
+                                   (org-roam-node-formatted node))))
+              (if (org-roam-node-id node)
+                  (progn
+                    (when region-text
+                      (delete-region beg end)
+                      (set-marker beg nil)
+                      (set-marker end nil))
+                    (insert (org-link-make-string
+                             (concat "id:" (org-roam-node-id node))
+                             description)))
+                (org-roam-capture-
+                 :node node
+                 :info info
+                 :templates (or templates org-roam-search-default-templates)
+                 :props (append
+                         (when (and beg end)
+                           (list :region (cons beg end)))
+                         (list :insert-at (point-marker)
+                               :link-description description
+                               :finalize 'insert-link))))
+              (insert " ")))))
     (deactivate-mark)))
 
 (provide 'org-roam-search)
