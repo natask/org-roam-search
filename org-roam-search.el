@@ -127,7 +127,7 @@ buffers opened using persistent-action.")
           (tags :name tags :aliases (tag)
                 :transform
                 ((`(,(or 'tags 'tag) . ,rest)
-                  (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec (org-roam-search--verify-tag elem))))) (cons 'and rest))))
+                  (-tree-map (lambda (elem) (if (member elem '(or and)) elem `(like tags ',(rec (org-roam-search--validate-tag elem))))) (cons 'and rest))))
                 :stringify
                 ((`(,(or 'tags 'tag) . ,rest)
                   (plist-put accum :tags (-concat (plist-get accum :tags) rest)))))
@@ -228,7 +228,7 @@ Look at `sexp-string--transform-query' for more information."
                                 :predicates org-roam-search-predicates
                                 :ignore 't))
 
-(defun org-roam-search--verify-tag (tag)
+(defun org-roam-search--validate-tag (tag)
   "Make sure TAG is a valid org tag.
 All characters within tag that don't meet org syntax for tag specification are converted to `_'."
   (replace-regexp-in-string
@@ -236,10 +236,10 @@ All characters within tag that don't meet org syntax for tag specification are c
    "_"
    tag))
 
-(defun org-roam-search--verify-tags (tags)
+(defun org-roam-search--validate-tags (tags)
   "Make sure list of TAGS are valid org tags.
 All characters within tag that don't meet org syntax for tag specification are converted to `_'."
-  (mapcar 'org-roam-search--verify-tag tags))
+  (mapcar 'org-roam-search--validate-tag tags))
 
 (defun org-roam-search-map-entry (type)
   `(= level ,(string-to-number elem)
@@ -357,7 +357,7 @@ SOURCE is not used."
                                                (org-roam-search--query-string-to-sexp it)
                                                (org-roam-search--transform-query it :stringify)
                                                (plist-put it :title (org-roam-search--join-title (plist-get it :title)))
-                                               (plist-put it :tags (append (org-roam-search--verify-tags org-roam-search-default-tags) (plist-get it :tags))))
+                                               (plist-put it :tags (org-roam-search--validate-tags (append org-roam-search-default-tags (plist-get it :tags)))))
                         (error '(:title "" :tags nil))))
          (prefix (propertize "[?]" 'face 'helm-ff-prefix))
          (element (org-roam-node-read--to-candidate
