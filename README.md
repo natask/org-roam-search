@@ -7,6 +7,7 @@ I wanted a better search engine for my org roam files. I was tired of fiddling w
 
 # Usage
 run `org-roam-search-node-find` or `org-roam-search-node-insert`. They are drop in replacements for `org-roam-node-find` and `org-roam-node-insert`.
+
 type in `tag:tag1 search string` is a valid search that displays nodes with tag `tag1` and contain `search string`.
 
 # Features
