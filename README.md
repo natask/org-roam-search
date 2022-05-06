@@ -20,7 +20,7 @@ searches for files that have tag query1 and query2 or have an alias/title matchi
 
 - integrate with [delve-show](https://github.com/natask/delve-show) to export org roam buffers into persistent form.
  
- support key words
+## supported key words
 - tag
 - title
 - olp (path to node)
