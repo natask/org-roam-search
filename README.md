@@ -27,3 +27,5 @@ searches for files that have tag query1 and query2 or have an alias/title matchi
 - olp (path to node)
 - destination (node that is pointed by link)
 - source (node that points to link) 
+
+look at https://github.com/natask/sexp-string#custom-pexs for syntax.
