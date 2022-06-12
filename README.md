@@ -48,6 +48,8 @@ and place the following in `~/.doom.d/config.el`
           (("C-c n i" . org-roam-search-node-insert)))
     )
 ```
+and run `~/.emacs.d/bin/doom upgrade`
+
 # Usage
 run `org-roam-search-node-find` or `org-roam-search-node-insert`. They are drop in replacements for `org-roam-node-find` and `org-roam-node-insert`.
 
