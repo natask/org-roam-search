@@ -396,12 +396,18 @@ LIMIT is the maximum resultant nodes."
                                 (car (emacsql-prepare `[,conditions]))))
          (destination-nodes-query (if node-source-conditions
                                       `[:select :distinct [dest]
-                                        :from links
+                                        :from
+                                        [:select [dest (as (funcall group_concat source " ") source)]
+                                         :from links
+                                         :group-by dest]
                                         :where ,node-source-conditions
                                         :limit ,(or limit org-roam-search-max)]));; TODO: support citations and searching with refs in the future.
          (source-nodes-query (if node-destination-conditions
                                  `[:select :distinct [source]
-                                   :from links
+                                   :from
+                                   [:select [source (as (funcall group_concat dest " ") dest)]
+                                    :from links
+                                    :group-by source]
                                    :where ,node-destination-conditions
                                    :limit ,(or limit org-roam-search-max)]))
          (nodes-query (org-roam-search--join-vecs source-nodes-query destination-nodes-query))
@@ -411,7 +417,10 @@ LIMIT is the maximum resultant nodes."
                                    `(= id ,(car node))) it)
                          (cons 'or it)
                          (emacsql-prepare `[,it])
-                         (car it)))
+                         (car it)
+                         (if it
+                             it
+                             '(= id "0"))))
          (constraint-clause (org-roam-search--join-clauses conditions-clause filter-clause nodes-clause))
          (where-clause (if constraint-clause
                            (concat "WHERE " constraint-clause)))
